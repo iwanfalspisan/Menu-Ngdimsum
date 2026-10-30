@@ -23,6 +23,7 @@ import {
   isRealAppsScriptUrl,
   markLocalMutation,
   flushPendingOrdersQueue,
+  resetAllOrdersStorage,
 } from './services/googleSheetsService';
 import { formatCurrency } from './services/whatsappService';
 import { Navbar } from './components/Navbar';
@@ -48,130 +49,6 @@ import {
   Settings,
 } from 'lucide-react';
 
-const SEED_ORDERS: Order[] = [
-  {
-    id: 'RMH-1023-482',
-    createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    customer: {
-      name: 'Rian Pratama',
-      phone: '081298765432',
-      orderType: 'takeaway',
-      notes: 'Sambal jangan terlalu pedas, tolong sumpit 2 pasang ya mbak',
-    },
-    items: [
-      {
-        id: 'dm-01',
-        name: 'Siomay Ayam Udang Premium',
-        price: 26000,
-        quantity: 2,
-        pieces: '4 pcs',
-        chiliLevel: 'Normal',
-        subtotal: 52000,
-      },
-      {
-        id: 'dm-09',
-        name: 'Dimsum Mentai Bakar Tobiko',
-        price: 33000,
-        quantity: 1,
-        pieces: '4 pcs',
-        chiliLevel: 'Normal',
-        subtotal: 33000,
-      },
-      {
-        id: 'dm-12',
-        name: 'Es Teh Krisan Madu Artisan',
-        price: 15000,
-        quantity: 2,
-        pieces: 'Gelas 450ml',
-        subtotal: 30000,
-      },
-    ],
-    subtotal: 115000,
-    packagingFee: 0,
-    deliveryFee: 0,
-    discount: 0,
-    total: 115000,
-    payment: {
-      method: 'qris',
-      status: 'paid',
-      paidAt: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
-      referenceNumber: 'PAY-8829104',
-    },
-    status: 'diproses_dapur',
-    estimatedTimeMinutes: 15,
-    statusHistory: [
-      {
-        status: 'menunggu_pembayaran',
-        timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-        note: 'Pesanan masuk ke dapur',
-      },
-      {
-        status: 'diproses_dapur',
-        timestamp: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-        note: 'Pembayaran QRIS lunas. Dapur mengukus siomay & mentai.',
-      },
-    ],
-    syncedToGoogleSheet: true,
-    whatsappNotified: true,
-  },
-  {
-    id: 'RMH-1023-391',
-    createdAt: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
-    customer: {
-      name: 'Nadia Salsabila',
-      phone: '085712349988',
-      orderType: 'delivery',
-      deliveryAddress: 'Jl. Melati IV No. 12, Kelapa Gading',
-      notes: 'Titip di satpam ya mbak',
-    },
-    items: [
-      {
-        id: 'dm-02',
-        name: 'Hakau Udang Kristal Transparan',
-        price: 29000,
-        quantity: 2,
-        pieces: '4 pcs',
-        subtotal: 58000,
-      },
-      {
-        id: 'dm-06',
-        name: 'Pangsit Udang Goreng Mayonaise',
-        price: 28000,
-        quantity: 1,
-        pieces: '4 pcs',
-        subtotal: 28000,
-      },
-    ],
-    subtotal: 86000,
-    packagingFee: 0,
-    deliveryFee: 10000,
-    discount: 0,
-    total: 96000,
-    payment: {
-      method: 'va_bca',
-      status: 'paid',
-      paidAt: new Date(Date.now() - 32 * 60 * 1000).toISOString(),
-      referenceNumber: 'PAY-4491023',
-    },
-    status: 'siap_saji',
-    estimatedTimeMinutes: 15,
-    statusHistory: [
-      {
-        status: 'diproses_dapur',
-        timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        note: 'Sedang digoreng & dikukus',
-      },
-      {
-        status: 'siap_saji',
-        timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
-        note: 'Dimsum siap diambil kurir ojol',
-      },
-    ],
-    syncedToGoogleSheet: true,
-    whatsappNotified: true,
-  },
-];
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<'menu' | 'admin'>('menu');
   // Menu Items backed by localStorage & 2-way Google Sheet
@@ -186,11 +63,8 @@ export default function App() {
   });
 
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const existing = loadOrdersFromStorage();
-    if (existing && existing.length > 0) return existing;
-    return SEED_ORDERS;
-  });
+  // Mulai dengan daftar transaksi kosong (0 transaksi) sampai ada pesanan asli masuk
+  const [orders, setOrders] = useState<Order[]>(() => loadOrdersFromStorage());
 
   // Admin authentication state (hidden login for owner only; customers NEVER need login)
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
@@ -768,6 +642,15 @@ export default function App() {
           <AdminDashboard
             orders={orders}
             onUpdateOrderStatus={handleUpdateOrderStatus}
+            onClearOrdersHistory={async () => {
+              await resetAllOrdersStorage(googleSheetConfig);
+              setOrders([]);
+              setToast({
+                id: Date.now().toString(),
+                title: 'Riwayat Dikosongkan',
+                message: 'Seluruh riwayat statistik penjualan berhasil di-reset ke 0.',
+              });
+            }}
             menuItems={menuItems}
             onAddMenuItem={handleAddMenuItem}
             onUpdateMenuItem={handleUpdateMenuItem}

@@ -39,6 +39,7 @@ import {
 interface AdminDashboardProps {
   orders: Order[];
   onUpdateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
+  onClearOrdersHistory?: () => void;
   menuItems: MenuItem[];
   onAddMenuItem: (item: MenuItem) => void;
   onUpdateMenuItem: (item: MenuItem) => void;
@@ -57,6 +58,7 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   orders,
   onUpdateOrderStatus,
+  onClearOrdersHistory,
   menuItems,
   onAddMenuItem,
   onUpdateMenuItem,
@@ -669,6 +671,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Download className="w-3.5 h-3.5" />
                 <span>Unduh Rekapan (CSV)</span>
               </button>
+
+              {orders.length > 0 && onClearOrdersHistory && (
+                <button
+                  type="button"
+                  onClick={onClearOrdersHistory}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Riwayat</span>
+                </button>
+              )}
             </div>
           </div>
 

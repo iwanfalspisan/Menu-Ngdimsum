@@ -90,15 +90,68 @@ export const DEFAULT_SHEET_CONFIG: GoogleSheetConfig = {
   syncStatus: 'connected',
 };
 
-const STORAGE_KEY_ORDERS = 'hao_dimsum_orders_v1';
+const STORAGE_KEY_ORDERS = 'ngdimsum_orders_live_v2';
 const STORAGE_KEY_CONFIG = 'hao_dimsum_gs_config_v3';
-const STORAGE_KEY_OUTBOX_QUEUE = 'ngdimsum_pending_order_queue_v1';
+const STORAGE_KEY_OUTBOX_QUEUE = 'ngdimsum_pending_order_queue_v2';
+const STORAGE_KEY_RESET_TIMESTAMP = 'ngdimsum_stats_reset_timestamp_v1';
+
+// Pastikan saat pertama kali versi bersih ini berjalan, riwayat lama otomatis di-reset ke 0 transaksi
+export const getStatsResetTimestamp = (): number => {
+  try {
+    // Hapus kunci lama yang berisi data dummy (SEED_ORDERS)
+    localStorage.removeItem('hao_dimsum_orders_v1');
+    localStorage.removeItem('ngdimsum_last_order');
+    localStorage.removeItem('ngdimsum_pending_order_queue_v1');
+
+    const saved = localStorage.getItem(STORAGE_KEY_RESET_TIMESTAMP);
+    if (saved) {
+      return Number(saved) || 0;
+    }
+    const now = Date.now();
+    localStorage.setItem(STORAGE_KEY_RESET_TIMESTAMP, String(now));
+    localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify([]));
+    return now;
+  } catch (e) {
+    return Date.now();
+  }
+};
+
+export const resetAllOrdersStorage = async (config?: GoogleSheetConfig): Promise<void> => {
+  try {
+    const now = Date.now();
+    localStorage.setItem(STORAGE_KEY_RESET_TIMESTAMP, String(now));
+    localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_OUTBOX_QUEUE, JSON.stringify([]));
+    localStorage.removeItem('hao_dimsum_orders_v1');
+    localStorage.removeItem('ngdimsum_last_order');
+  } catch (e) {
+    console.error(e);
+  }
+
+  if (config && isRealAppsScriptUrl(config.webAppUrl)) {
+    try {
+      await fetch(config.webAppUrl.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'clear_orders' }),
+      });
+    } catch (e) {}
+  }
+};
 
 export const loadOrdersFromStorage = (): Order[] => {
   try {
+    const resetAt = getStatsResetTimestamp();
     const raw = localStorage.getItem(STORAGE_KEY_ORDERS);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const parsed: Order[] = JSON.parse(raw);
+    return parsed.filter((o) => {
+      if (o.id === 'RMH-1023-482' || o.id === 'RMH-1023-391' || o.id.startsWith('TEST-')) {
+        return false;
+      }
+      const createdMs = new Date(o.createdAt).getTime();
+      return !isNaN(createdMs) ? createdMs >= resetAt : true;
+    });
   } catch (e) {
     console.error('Failed to load local orders:', e);
     return [];
@@ -933,12 +986,21 @@ export const fetchTwoWaySyncFromSheet = async (
         }))
       : undefined;
 
+    const resetAt = getStatsResetTimestamp();
     const parsedOrders: Order[] | undefined = Array.isArray(data.orders)
-      ? data.orders.map((o: any) => ({
-          ...o,
-          status: (o.status as OrderStatus) || 'diproses_dapur',
-          syncedToGoogleSheet: true,
-        }))
+      ? data.orders
+          .map((o: any) => ({
+            ...o,
+            status: (o.status as OrderStatus) || 'diproses_dapur',
+            syncedToGoogleSheet: true,
+          }))
+          .filter((o: Order) => {
+            if (o.id === 'RMH-1023-482' || o.id === 'RMH-1023-391' || o.id.startsWith('TEST-')) {
+              return false;
+            }
+            const createdMs = new Date(o.createdAt).getTime();
+            return !isNaN(createdMs) ? createdMs >= resetAt : false;
+          })
       : undefined;
 
     let parsedSettings: Partial<StoreSettings> | undefined;

@@ -39,6 +39,7 @@ import {
 interface AdminDashboardProps {
   orders: Order[];
   onUpdateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
+  onDeleteOrder?: (orderId: string) => void;
   onClearOrdersHistory?: () => void;
   menuItems: MenuItem[];
   onAddMenuItem: (item: MenuItem) => void;
@@ -58,6 +59,7 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   orders,
   onUpdateOrderStatus,
+  onDeleteOrder,
   onClearOrdersHistory,
   menuItems,
   onAddMenuItem,
@@ -672,14 +674,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <span>Unduh Rekapan (CSV)</span>
               </button>
 
-              {orders.length > 0 && onClearOrdersHistory && (
+              {onClearOrdersHistory && (
                 <button
                   type="button"
                   onClick={onClearOrdersHistory}
-                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition-all"
+                  title="Hapus semua riwayat transaksi penjualan"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Hapus Riwayat</span>
+                  <span>Hapus Riwayat Transaksi</span>
                 </button>
               )}
             </div>
@@ -687,10 +690,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Tabel Rekapan Semua Penjualan */}
           <div className="bg-white rounded-xl border border-rose-100 shadow-2xs overflow-hidden">
-            <div className="px-4 py-3 border-b border-rose-100 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-rose-100 flex items-center justify-between gap-2">
               <h3 className="font-bold text-xs text-stone-800 uppercase tracking-wider">
                 Daftar Rekapan Semua Pesanan ({filteredOrders.length})
               </h3>
+              {orders.length > 0 && onClearOrdersHistory && (
+                <button
+                  type="button"
+                  onClick={onClearOrdersHistory}
+                  className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Kosongkan Semua</span>
+                </button>
+              )}
             </div>
 
             {filteredOrders.length === 0 ? (
@@ -711,7 +724,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="py-2.5 px-3.5">Pengambilan</th>
                       <th className="py-2.5 px-3.5">Rincian Menu</th>
                       <th className="py-2.5 px-3.5">Total Penjualan</th>
-                      <th className="py-2.5 px-3.5 text-right">Struk / WA</th>
+                      <th className="py-2.5 px-3.5 text-right">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-rose-50/60 text-stone-800">
@@ -785,6 +798,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <td className="py-3 px-3.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
+                              type="button"
                               onClick={() => onPrintReceipt(order)}
                               className="p-1.5 rounded-md border border-stone-200 text-stone-600 hover:text-stone-900 hover:bg-stone-50"
                               title="Cetak Struk"
@@ -802,6 +816,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 <MessageCircle className="w-3.5 h-3.5" />
                               </a>
+                            )}
+
+                            {onDeleteOrder && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteOrder(order.id)}
+                                className="p-1.5 rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                                title="Hapus Transaksi Ini"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             )}
                           </div>
                         </td>

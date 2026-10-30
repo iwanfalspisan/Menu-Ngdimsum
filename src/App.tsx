@@ -7,8 +7,9 @@ import {
   OrderStatus,
   GoogleSheetConfig,
   StoreSettings,
+  MenuReview,
 } from './types';
-import { INITIAL_MENU, DEFAULT_STORE_SETTINGS } from './data/dimsumMenu';
+import { INITIAL_MENU, DEFAULT_STORE_SETTINGS, INITIAL_REVIEWS } from './data/dimsumMenu';
 import {
   loadOrdersFromStorage,
   saveOrdersToStorage,
@@ -24,6 +25,7 @@ import {
   markLocalMutation,
   flushPendingOrdersQueue,
   resetAllOrdersStorage,
+  deleteSingleOrderStorage,
 } from './services/googleSheetsService';
 import { formatCurrency } from './services/whatsappService';
 import { Navbar } from './components/Navbar';
@@ -65,6 +67,56 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   // Mulai dengan daftar transaksi kosong (0 transaksi) sampai ada pesanan asli masuk
   const [orders, setOrders] = useState<Order[]>(() => loadOrdersFromStorage());
+
+  // Reviews & Star Ratings per Menu Item (persisted in localStorage)
+  const [reviews, setReviews] = useState<MenuReview[]>(() => {
+    try {
+      const saved = localStorage.getItem('ngdimsum_menu_reviews_v1');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_REVIEWS;
+  });
+
+  // Loading animation state for initial load & category transitions
+  const [isMenuLoading, setIsMenuLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsMenuLoading(false), 420);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ngdimsum_menu_reviews_v1', JSON.stringify(reviews));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [reviews]);
+
+  const handleAddReview = (
+    menuItemId: string,
+    rating: number,
+    reviewerName: string,
+    comment: string
+  ) => {
+    const targetMenu = menuItems.find((m) => m.id === menuItemId);
+    const newReview: MenuReview = {
+      id: `rev-${Date.now()}`,
+      menuItemId,
+      reviewerName,
+      rating,
+      comment,
+      createdAt: new Date().toISOString(),
+    };
+    setReviews((prev) => [newReview, ...prev]);
+    setToast({
+      id: Date.now().toString(),
+      title: 'Ulasan Terkirim!',
+      message: `Terima kasih atas rating ★${rating} untuk ${targetMenu?.name || 'menu ini'}.`,
+    });
+  };
 
   // Admin authentication state (hidden login for owner only; customers NEVER need login)
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
@@ -593,7 +645,13 @@ export default function App() {
               <div id="filter-kategori">
                 <MenuFilter
                   selectedCategory={selectedCategory}
-                  setSelectedCategory={setSelectedCategory}
+                  setSelectedCategory={(cat) => {
+                    if (cat !== selectedCategory) {
+                      setIsMenuLoading(true);
+                      setSelectedCategory(cat);
+                      setTimeout(() => setIsMenuLoading(false), 240);
+                    }
+                  }}
                   tagFilter={tagFilter}
                   setTagFilter={setTagFilter}
                   sortBy={sortBy}
@@ -604,9 +662,30 @@ export default function App() {
                 />
               </div>
 
-              {/* Product Grid (Compact 2-4 columns) */}
-              {filteredMenu.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center text-stone-500">
+              {/* Product Grid with Loading Skeleton & Smooth Staggered Transitions */}
+              {isMenuLoading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 animate-fade-smooth">
+                  {Array.from({ length: 8 }).map((_, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-col bg-white border border-rose-100/80 rounded-xl overflow-hidden shadow-2xs"
+                    >
+                      <div className="aspect-[16/11] w-full bg-gradient-to-r from-rose-50 via-rose-100/70 to-rose-50 animate-shimmer" />
+                      <div className="p-3 space-y-2">
+                        <div className="h-2.5 w-16 bg-rose-100/80 rounded animate-pulse" />
+                        <div className="h-3.5 w-3/4 bg-stone-200/80 rounded animate-pulse" />
+                        <div className="h-3 w-1/2 bg-amber-100/80 rounded animate-pulse" />
+                        <div className="h-2.5 w-full bg-stone-100 rounded animate-pulse" />
+                        <div className="pt-2 border-t border-rose-50 flex items-center justify-between">
+                          <div className="h-4 w-16 bg-rose-100 rounded animate-pulse" />
+                          <div className="h-6 w-16 bg-rose-200/70 rounded-lg animate-pulse" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredMenu.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center text-stone-500 animate-fade-up">
                   <UtensilsCrossed className="w-7 h-7 text-rose-300 mx-auto mb-2" />
                   <h3 className="font-bold text-stone-800 text-xs">Dimsum Tidak Ditemukan</h3>
                   <p className="text-xs text-stone-400 mt-1">
@@ -625,10 +704,13 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                  {filteredMenu.map((item) => (
+                  {filteredMenu.map((item, idx) => (
                     <MenuCard
                       key={item.id}
                       item={item}
+                      index={idx}
+                      reviews={reviews.filter((r) => r.menuItemId === item.id)}
+                      onAddReview={handleAddReview}
                       onAddToCart={handleAddToCart}
                     />
                   ))}
@@ -642,13 +724,22 @@ export default function App() {
           <AdminDashboard
             orders={orders}
             onUpdateOrderStatus={handleUpdateOrderStatus}
+            onDeleteOrder={async (orderId) => {
+              await deleteSingleOrderStorage(orderId, googleSheetConfig);
+              setOrders((prev) => prev.filter((o) => o.id !== orderId));
+              setToast({
+                id: Date.now().toString(),
+                title: 'Transaksi Dihapus',
+                message: `Riwayat transaksi #${orderId} telah dihapus.`,
+              });
+            }}
             onClearOrdersHistory={async () => {
               await resetAllOrdersStorage(googleSheetConfig);
               setOrders([]);
               setToast({
                 id: Date.now().toString(),
                 title: 'Riwayat Dikosongkan',
-                message: 'Seluruh riwayat statistik penjualan berhasil di-reset ke 0.',
+                message: 'Seluruh riwayat statistik penjualan berhasil dihapus.',
               });
             }}
             menuItems={menuItems}
@@ -869,14 +960,11 @@ export default function App() {
             </div>
           </div>
 
-          <div className="pt-6 mt-6 border-t border-rose-900/50 text-[11px] text-rose-300/70 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div className="pt-6 mt-6 border-t border-rose-900/50 text-[11px] text-rose-300/70 flex items-center">
             <div className="flex items-center gap-1.5">
               <span>© 2026 {storeSettings.storeName}.</span>
-            </div>
-
-            {/* Hidden Discreet Admin Trigger: Only accessible if clicked by owner or Alt+A */}
-            <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={() => {
                   if (isAdminLoggedIn) {
                     setActiveTab('admin');
@@ -884,11 +972,10 @@ export default function App() {
                     setIsAdminLoginModalOpen(true);
                   }
                 }}
-                className="text-rose-400/40 hover:text-rose-300 transition-colors p-1 flex items-center gap-1 text-[10px]"
-                title="Akses Pengelola Dapur (PIN: 1234)"
+                aria-label="Admin"
+                className="text-rose-400/50 hover:text-rose-200 transition-colors p-1 inline-flex items-center"
               >
                 <Lock className="w-3 h-3" />
-                <span className="opacity-0 hover:opacity-100 transition-opacity">Akses Pemilik</span>
               </button>
             </div>
           </div>

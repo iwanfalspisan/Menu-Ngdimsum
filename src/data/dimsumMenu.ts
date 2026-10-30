@@ -1,4 +1,4 @@
-import { MenuItem } from '../types';
+import { MenuItem, MenuReview } from '../types';
 
 export const INITIAL_MENU: MenuItem[] = [
   {
@@ -227,3 +227,55 @@ export const DEFAULT_STORE_SETTINGS = {
   promoImageUrl: '/images/dimsum_mentai_special_1792773517652.jpg',
   promoCategoryTarget: 'spesial' as const,
 };
+
+export const INITIAL_REVIEWS: MenuReview[] = [
+  {
+    id: 'rev-1',
+    menuItemId: 'dm-01',
+    reviewerName: 'Rina S.',
+    rating: 5,
+    comment: 'Siomaynya padat daging dan udangnya terasa banget, chili oilnya juara!',
+    createdAt: '2026-10-28T10:15:00.000Z',
+  },
+  {
+    id: 'rev-2',
+    menuItemId: 'dm-01',
+    reviewerName: 'Dimas P.',
+    rating: 5,
+    comment: 'Hangat dan lembut, ukuran per pcs lumayan besar.',
+    createdAt: '2026-10-29T14:20:00.000Z',
+  },
+  {
+    id: 'rev-3',
+    menuItemId: 'dm-02',
+    reviewerName: 'Nadia K.',
+    rating: 5,
+    comment: 'Kulit hakaunya tipis kenyal gak gampang sobek, udangnya manis segar.',
+    createdAt: '2026-10-28T12:00:00.000Z',
+  },
+  {
+    id: 'rev-4',
+    menuItemId: 'dm-03',
+    reviewerName: 'Hendra W.',
+    rating: 5,
+    comment: 'Kuah kaldunya gurih banget pas dimakan hangat-hangat.',
+    createdAt: '2026-10-27T18:30:00.000Z',
+  },
+  {
+    id: 'rev-5',
+    menuItemId: 'dm-06',
+    reviewerName: 'Ayu L.',
+    rating: 5,
+    comment: 'Renyah banget dan saus mayonaisenya pas manis gurihnya.',
+    createdAt: '2026-10-29T16:10:00.000Z',
+  },
+  {
+    id: 'rev-6',
+    menuItemId: 'dm-09',
+    reviewerName: 'Fajar R.',
+    rating: 5,
+    comment: 'Saus mentainya wangi smoky dan melimpah, wajib coba!',
+    createdAt: '2026-10-29T19:45:00.000Z',
+  },
+];
+

@@ -94,6 +94,43 @@ const STORAGE_KEY_ORDERS = 'ngdimsum_orders_live_v2';
 const STORAGE_KEY_CONFIG = 'hao_dimsum_gs_config_v3';
 const STORAGE_KEY_OUTBOX_QUEUE = 'ngdimsum_pending_order_queue_v2';
 const STORAGE_KEY_RESET_TIMESTAMP = 'ngdimsum_stats_reset_timestamp_v1';
+const STORAGE_KEY_DELETED_ORDER_IDS = 'ngdimsum_deleted_order_ids_v1';
+
+export const getDeletedOrderIds = (): string[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DELETED_ORDER_IDS);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const deleteSingleOrderStorage = async (
+  orderId: string,
+  config?: GoogleSheetConfig
+): Promise<void> => {
+  markLocalMutation();
+  try {
+    const deleted = getDeletedOrderIds();
+    if (!deleted.includes(orderId)) {
+      deleted.push(orderId);
+      localStorage.setItem(STORAGE_KEY_DELETED_ORDER_IDS, JSON.stringify(deleted));
+    }
+    removeOrderFromSyncQueue(orderId);
+  } catch (e) {
+    console.error(e);
+  }
+
+  if (config && isRealAppsScriptUrl(config.webAppUrl)) {
+    try {
+      await fetch(config.webAppUrl.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'delete_order', orderId }),
+      });
+    } catch (e) {}
+  }
+};
 
 // Pastikan saat pertama kali versi bersih ini berjalan, riwayat lama otomatis di-reset ke 0 transaksi
 export const getStatsResetTimestamp = (): number => {
@@ -117,6 +154,7 @@ export const getStatsResetTimestamp = (): number => {
 };
 
 export const resetAllOrdersStorage = async (config?: GoogleSheetConfig): Promise<void> => {
+  markLocalMutation();
   try {
     const now = Date.now();
     localStorage.setItem(STORAGE_KEY_RESET_TIMESTAMP, String(now));
@@ -142,11 +180,17 @@ export const resetAllOrdersStorage = async (config?: GoogleSheetConfig): Promise
 export const loadOrdersFromStorage = (): Order[] => {
   try {
     const resetAt = getStatsResetTimestamp();
+    const deletedIds = getDeletedOrderIds();
     const raw = localStorage.getItem(STORAGE_KEY_ORDERS);
     if (!raw) return [];
     const parsed: Order[] = JSON.parse(raw);
     return parsed.filter((o) => {
-      if (o.id === 'RMH-1023-482' || o.id === 'RMH-1023-391' || o.id.startsWith('TEST-')) {
+      if (
+        o.id === 'RMH-1023-482' ||
+        o.id === 'RMH-1023-391' ||
+        o.id.startsWith('TEST-') ||
+        deletedIds.includes(o.id)
+      ) {
         return false;
       }
       const createdMs = new Date(o.createdAt).getTime();
@@ -987,6 +1031,7 @@ export const fetchTwoWaySyncFromSheet = async (
       : undefined;
 
     const resetAt = getStatsResetTimestamp();
+    const deletedIds = getDeletedOrderIds();
     const parsedOrders: Order[] | undefined = Array.isArray(data.orders)
       ? data.orders
           .map((o: any) => ({
@@ -995,7 +1040,12 @@ export const fetchTwoWaySyncFromSheet = async (
             syncedToGoogleSheet: true,
           }))
           .filter((o: Order) => {
-            if (o.id === 'RMH-1023-482' || o.id === 'RMH-1023-391' || o.id.startsWith('TEST-')) {
+            if (
+              o.id === 'RMH-1023-482' ||
+              o.id === 'RMH-1023-391' ||
+              o.id.startsWith('TEST-') ||
+              deletedIds.includes(o.id)
+            ) {
               return false;
             }
             const createdMs = new Date(o.createdAt).getTime();

@@ -18,6 +18,15 @@ export interface MenuItem {
   driveFileId?: string;
 }
 
+export interface MenuReview {
+  id: string;
+  menuItemId: string;
+  reviewerName: string;
+  rating: number; // 1 to 5
+  comment: string;
+  createdAt: string;
+}
+
 export interface CartItem {
   menuItem: MenuItem;
   quantity: number;

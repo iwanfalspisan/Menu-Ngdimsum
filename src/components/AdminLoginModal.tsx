@@ -70,14 +70,14 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                   setPin(e.target.value);
                   if (error) setError(false);
                 }}
-                placeholder="PIN (Default: 1234)"
+                placeholder="PIN"
                 className="w-full pl-9 pr-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200 font-mono tracking-widest text-center"
               />
             </div>
             {error && (
               <div className="flex items-center gap-1 text-[11px] text-rose-600 mt-1.5 font-medium">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>PIN salah. Silakan coba lagi (Default: 1234).</span>
+                <span>PIN salah. Silakan coba lagi.</span>
               </div>
             )}
           </div>
@@ -89,10 +89,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             <span>Buka Dasbor Dapur</span>
           </button>
         </form>
-
-        <div className="mt-4 pt-3 border-t border-stone-100 text-center text-[10px] text-stone-400">
-          PIN default adalah <strong className="text-stone-600">1234</strong>. Anda dapat mengubahnya di pengaturan dasbor.
-        </div>
       </div>
     </div>
   );

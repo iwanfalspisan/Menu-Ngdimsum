@@ -1,0 +1,8 @@
+{
+  "name": "Remix Dimsum Hao - Pemesanan Online \u0026 Realtime Dashboard",
+  "description": "Aplikasi pemesanan menu dimsum artisanal dengan integrasi pembayaran online, notifikasi WhatsApp admin, push notification status pesanan, dan backend Google Sheets \u0026 Drive via Apps Script.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

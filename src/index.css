@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #292524;
+    background-color: #fdf5f5;
+  }
+
+  h1, h2, h3, .font-serif-brand {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+@layer utilities {
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .animate-shimmer {
+    background-size: 200% 100%;
+    animation: shimmer 2.5s infinite linear;
+  }
+}

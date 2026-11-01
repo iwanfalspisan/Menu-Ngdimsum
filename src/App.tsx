@@ -26,6 +26,8 @@ import {
   flushPendingOrdersQueue,
   resetAllOrdersStorage,
   deleteSingleOrderStorage,
+  deduplicateOrdersList,
+  getCanonicalOrderBaseId,
 } from './services/googleSheetsService';
 import { formatCurrency } from './services/whatsappService';
 import { Navbar } from './components/Navbar';
@@ -254,13 +256,17 @@ export default function App() {
     // 2. Sync Orders 2-Way (Sheet <-> Website)
     if (syncRes.orders && syncRes.orders.length > 0) {
       setOrders((prevOrders) => {
-        const sheetMap = new Map(syncRes.orders!.map((o) => [o.id, o]));
+        const sheetMap = new Map(
+          syncRes.orders!.map((o) => [getCanonicalOrderBaseId(o.id), o])
+        );
         const merged = prevOrders.map((localOrder) => {
-          const remote = sheetMap.get(localOrder.id);
+          const baseId = getCanonicalOrderBaseId(localOrder.id);
+          const remote = sheetMap.get(baseId);
           if (remote) {
-            sheetMap.delete(localOrder.id);
+            sheetMap.delete(baseId);
             return {
               ...localOrder,
+              id: baseId,
               status: remote.status || localOrder.status,
               syncedToGoogleSheet: true,
             };
@@ -270,7 +276,7 @@ export default function App() {
         const newFromSheet = Array.from(sheetMap.values()).filter(
           (o) => o.items && o.items.length > 0
         );
-        return [...newFromSheet, ...merged];
+        return deduplicateOrdersList([...newFromSheet, ...merged], googleSheetConfig);
       });
     }
 
@@ -509,17 +515,23 @@ export default function App() {
   };
 
   const handleOrderCreated = async (newOrder: Order) => {
-    setOrders((prev) => [newOrder, ...prev]);
+    const cleanId = getCanonicalOrderBaseId(newOrder.id);
+    const normalizedOrder: Order = { ...newOrder, id: cleanId };
+    setOrders((prev) => deduplicateOrdersList([normalizedOrder, ...prev], googleSheetConfig));
     setCart([]);
     setIsCartOpen(false);
     setIsCheckoutOpen(false);
 
     // Background 2-way sync to Google Sheets without showing any order-processing notification
     if (googleSheetConfig.autoSync && googleSheetConfig.webAppUrl) {
-      const syncResult = await syncOrderToGoogleAppsScript(newOrder, googleSheetConfig);
+      const syncResult = await syncOrderToGoogleAppsScript(normalizedOrder, googleSheetConfig);
       if (syncResult.success) {
         setOrders((prev) =>
-          prev.map((o) => (o.id === newOrder.id ? { ...o, syncedToGoogleSheet: true } : o))
+          prev.map((o) =>
+            getCanonicalOrderBaseId(o.id) === cleanId
+              ? { ...o, syncedToGoogleSheet: true }
+              : o
+          )
         );
       }
     }

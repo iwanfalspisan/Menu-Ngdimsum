@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   CartItem,
   Order,
@@ -32,6 +32,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   storeSettings,
   onOrderCreated,
 }) => {
+  const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      isSubmittingRef.current = false;
+    }
+  }, [isOpen]);
+
   const [customerName, setCustomerName] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('ngdimsum_customer_profile_v1');
@@ -172,6 +180,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       }
       return;
     }
+
+    if (isSubmittingRef.current) {
+      e.preventDefault();
+      return;
+    }
+    isSubmittingRef.current = true;
 
     setValidationError(null);
     try {

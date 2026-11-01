@@ -95,6 +95,58 @@ const STORAGE_KEY_CONFIG = 'hao_dimsum_gs_config_v3';
 const STORAGE_KEY_OUTBOX_QUEUE = 'ngdimsum_pending_order_queue_v2';
 const STORAGE_KEY_RESET_TIMESTAMP = 'ngdimsum_stats_reset_timestamp_v1';
 const STORAGE_KEY_DELETED_ORDER_IDS = 'ngdimsum_deleted_order_ids_v1';
+const STORAGE_KEY_SYNCED_ORDER_IDS = 'ngdimsum_synced_order_ids_v1';
+
+// Lock in-memory untuk mencegah pengiriman pesanan yang sama dua kali secara bersamaan
+const inFlightOrderSyncs = new Set<string>();
+
+/**
+ * Mengambil ID utama pesanan tanpa akhiran duplikat 3 karakter (misal: RMH-1101-0D1WBM-CF3 -> RMH-1101-0D1WBM)
+ */
+export const getCanonicalOrderBaseId = (orderId: string): string => {
+  const trimmed = String(orderId || '').trim();
+  const match = trimmed.match(/^(RMH-\d{4}-[A-Z0-9]{5,7})-[A-Z0-9]{3}$/i);
+  return match ? match[1].toUpperCase() : trimmed;
+};
+
+export const isSuffixedDuplicateOrderId = (orderId: string): boolean => {
+  const trimmed = String(orderId || '').trim();
+  return /^(RMH-\d{4}-[A-Z0-9]{5,7})-[A-Z0-9]{3}$/i.test(trimmed);
+};
+
+export const getSyncedOrderIds = (): string[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SYNCED_ORDER_IDS);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const markOrderIdAsSynced = (orderId: string): void => {
+  try {
+    const baseId = getCanonicalOrderBaseId(orderId);
+    const synced = getSyncedOrderIds();
+    let changed = false;
+    if (!synced.includes(baseId)) {
+      synced.push(baseId);
+      changed = true;
+    }
+    if (!synced.includes(orderId)) {
+      synced.push(orderId);
+      changed = true;
+    }
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY_SYNCED_ORDER_IDS, JSON.stringify(synced.slice(-500)));
+    }
+  } catch (e) {}
+};
+
+export const isOrderAlreadySynced = (orderId: string): boolean => {
+  const baseId = getCanonicalOrderBaseId(orderId);
+  const synced = getSyncedOrderIds();
+  return synced.includes(baseId) || synced.includes(orderId);
+};
 
 export const getDeletedOrderIds = (): string[] => {
   try {
@@ -105,18 +157,111 @@ export const getDeletedOrderIds = (): string[] => {
   }
 };
 
-export const deleteSingleOrderStorage = async (
-  orderId: string,
-  config?: GoogleSheetConfig
-): Promise<void> => {
-  markLocalMutation();
+export const addDeletedOrderIdLocal = (orderId: string): void => {
   try {
     const deleted = getDeletedOrderIds();
     if (!deleted.includes(orderId)) {
       deleted.push(orderId);
       localStorage.setItem(STORAGE_KEY_DELETED_ORDER_IDS, JSON.stringify(deleted));
     }
+  } catch (e) {}
+};
+
+/**
+ * Menghapus pesanan ganda/double (baik karena akhiran -XXX dari Apps Script maupun pengiriman ganda di menit yang sama)
+ */
+export const deduplicateOrdersList = (
+  orders: Order[],
+  config?: GoogleSheetConfig
+): Order[] => {
+  if (!Array.isArray(orders) || orders.length <= 1) return orders || [];
+
+  // Urutkan agar ID asli (tanpa akhiran -XXX) selalu diprioritaskan di atas ID berakhiran -XXX
+  const sorted = [...orders].sort((a, b) => {
+    const aIsSuffixed = isSuffixedDuplicateOrderId(a.id) ? 1 : 0;
+    const bIsSuffixed = isSuffixedDuplicateOrderId(b.id) ? 1 : 0;
+    if (aIsSuffixed !== bIsSuffixed) return aIsSuffixed - bIsSuffixed;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  const seenBaseIds = new Set<string>();
+  const seenSignatures = new Map<string, number>();
+  const uniqueOrders: Order[] = [];
+  const duplicateIdsToClean: string[] = [];
+
+  for (const order of sorted) {
+    if (!order || !order.id) continue;
+    const baseId = getCanonicalOrderBaseId(order.id);
+    const itemsSig = (order.items || [])
+      .map((i) => `${i.name}:${i.quantity}`)
+      .sort()
+      .join(',');
+    const contentSig = `${(order.customer?.name || '').trim().toLowerCase()}|${(
+      order.customer?.phone || ''
+    ).trim()}|${order.total}|${itemsSig}`;
+    const orderTimeMs = new Date(order.createdAt).getTime() || 0;
+
+    const isSameBaseId = seenBaseIds.has(baseId);
+    const prevSigTime = seenSignatures.get(contentSig);
+    const isSameContentWithinTwoMins =
+      prevSigTime !== undefined &&
+      itemsSig.length > 0 &&
+      Math.abs(orderTimeMs - prevSigTime) <= 120000;
+
+    if (isSameBaseId || isSameContentWithinTwoMins) {
+      // Tandai ID duplikat agar dihapus permanen dan tidak muncul lagi dari Sheet
+      if (order.id !== baseId || isSuffixedDuplicateOrderId(order.id) || isSameContentWithinTwoMins) {
+        duplicateIdsToClean.push(order.id);
+      }
+      continue;
+    }
+
+    seenBaseIds.add(baseId);
+    if (!isNaN(orderTimeMs) && orderTimeMs > 0) {
+      seenSignatures.set(contentSig, orderTimeMs);
+    }
+
+    // Jika hanya versi berakhiran -XXX yang tersisa, normalkan kembali ke baseId yang rapi
+    uniqueOrders.push(
+      isSuffixedDuplicateOrderId(order.id) ? { ...order, id: baseId } : order
+    );
+  }
+
+  if (duplicateIdsToClean.length > 0) {
+    duplicateIdsToClean.forEach((dupId) => {
+      addDeletedOrderIdLocal(dupId);
+      removeOrderFromSyncQueue(dupId);
+      if (config && isRealAppsScriptUrl(config.webAppUrl)) {
+        fetch(config.webAppUrl.trim(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'delete_order',
+            orderId: dupId,
+            spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
+          }),
+        }).catch(() => {});
+      }
+    });
+  }
+
+  // Kembalikan urutan berdasarkan waktu terbaru
+  return uniqueOrders.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+};
+
+export const deleteSingleOrderStorage = async (
+  orderId: string,
+  config?: GoogleSheetConfig
+): Promise<void> => {
+  markLocalMutation();
+  const baseId = getCanonicalOrderBaseId(orderId);
+  try {
+    addDeletedOrderIdLocal(orderId);
+    addDeletedOrderIdLocal(baseId);
     removeOrderFromSyncQueue(orderId);
+    removeOrderFromSyncQueue(baseId);
   } catch (e) {
     console.error(e);
   }
@@ -191,18 +336,21 @@ export const loadOrdersFromStorage = (): Order[] => {
     const raw = localStorage.getItem(STORAGE_KEY_ORDERS);
     if (!raw) return [];
     const parsed: Order[] = JSON.parse(raw);
-    return parsed.filter((o) => {
+    const filtered = parsed.filter((o) => {
+      const baseId = getCanonicalOrderBaseId(o.id);
       if (
         o.id === 'RMH-1023-482' ||
         o.id === 'RMH-1023-391' ||
         o.id.startsWith('TEST-') ||
-        deletedIds.includes(o.id)
+        deletedIds.includes(o.id) ||
+        deletedIds.includes(baseId)
       ) {
         return false;
       }
       const createdMs = new Date(o.createdAt).getTime();
       return !isNaN(createdMs) ? createdMs >= resetAt : true;
     });
+    return deduplicateOrdersList(filtered);
   } catch (e) {
     console.error('Failed to load local orders:', e);
     return [];
@@ -211,7 +359,8 @@ export const loadOrdersFromStorage = (): Order[] => {
 
 export const saveOrdersToStorage = (orders: Order[]): void => {
   try {
-    localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(orders));
+    const deduped = deduplicateOrdersList(orders);
+    localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(deduped));
   } catch (e) {
     console.error('Failed to save local orders:', e);
   }
@@ -238,16 +387,21 @@ export const savePendingOrderQueue = (queue: Order[]): void => {
 };
 
 export const enqueueOrderForSync = (order: Order): void => {
+  const baseId = getCanonicalOrderBaseId(order.id);
+  if (isOrderAlreadySynced(baseId)) return;
   const queue = loadPendingOrderQueue();
-  if (!queue.some((o) => o.id === order.id)) {
+  if (!queue.some((o) => getCanonicalOrderBaseId(o.id) === baseId)) {
     queue.push(order);
     savePendingOrderQueue(queue);
   }
 };
 
 export const removeOrderFromSyncQueue = (orderId: string): void => {
+  const baseId = getCanonicalOrderBaseId(orderId);
   const queue = loadPendingOrderQueue();
-  const next = queue.filter((o) => o.id !== orderId);
+  const next = queue.filter(
+    (o) => o.id !== orderId && getCanonicalOrderBaseId(o.id) !== baseId
+  );
   savePendingOrderQueue(next);
 };
 
@@ -717,22 +871,16 @@ function doPost(e) {
       const lastOrderRow = sheetOrders.getLastRow();
 
       if (lastOrderRow > 1) {
-        const existingOrders = sheetOrders.getRange(2, 1, lastOrderRow - 1, 4).getValues();
+        const existingOrders = sheetOrders.getRange(2, 1, lastOrderRow - 1, 1).getValues();
         for (let i = 0; i < existingOrders.length; i++) {
-          if (String(existingOrders[i][0]) === finalOrderId) {
-            const existingPhone = String(existingOrders[i][3] || '');
-            const incomingPhone = String((order.customer && order.customer.phone) || '');
-            if (existingPhone === incomingPhone) {
-              return createJsonResponse({
-                status: 'success',
-                duplicate: true,
-                message: 'Pesanan #' + finalOrderId + ' sudah tercatat aman di Sheet.',
-                orderId: finalOrderId
-              });
-            } else {
-              finalOrderId = finalOrderId + '-' + Utilities.getUuid().slice(0, 3).toUpperCase();
-              break;
-            }
+          const rowId = String(existingOrders[i][0] || '');
+          if (rowId === finalOrderId || rowId.indexOf(finalOrderId + '-') === 0) {
+            return createJsonResponse({
+              status: 'success',
+              duplicate: true,
+              message: 'Pesanan #' + finalOrderId + ' sudah tercatat aman di Sheet.',
+              orderId: finalOrderId
+            });
           }
         }
       }
@@ -1084,7 +1232,7 @@ export const fetchTwoWaySyncFromSheet = async (
 
     const resetAt = getStatsResetTimestamp();
     const deletedIds = getDeletedOrderIds();
-    const parsedOrders: Order[] | undefined = Array.isArray(data.orders)
+    const rawOrders: Order[] | undefined = Array.isArray(data.orders)
       ? data.orders
           .map((o: any) => ({
             ...o,
@@ -1092,17 +1240,22 @@ export const fetchTwoWaySyncFromSheet = async (
             syncedToGoogleSheet: true,
           }))
           .filter((o: Order) => {
+            const baseId = getCanonicalOrderBaseId(o.id);
             if (
               o.id === 'RMH-1023-482' ||
               o.id === 'RMH-1023-391' ||
               o.id.startsWith('TEST-') ||
-              deletedIds.includes(o.id)
+              deletedIds.includes(o.id) ||
+              deletedIds.includes(baseId)
             ) {
               return false;
             }
             const createdMs = new Date(o.createdAt).getTime();
             return !isNaN(createdMs) ? createdMs >= resetAt : false;
           })
+      : undefined;
+    const parsedOrders: Order[] | undefined = rawOrders
+      ? deduplicateOrdersList(rawOrders, config)
       : undefined;
 
     let parsedSettings: Partial<StoreSettings> | undefined;
@@ -1363,66 +1516,84 @@ export const syncSettingsToGoogleSheet = async (
 };
 
 /**
- * Mengirim 1 pesanan ke Google Apps Script dengan sistem Auto-Retry (Anti-Bentrok & Anti-Hilang)
+ * Mengirim 1 pesanan ke Google Apps Script dengan sistem Auto-Retry (Anti-Bentrok & Anti-Duplikat)
  */
 export const syncOrderToGoogleAppsScript = async (
   order: Order,
   config: GoogleSheetConfig
 ): Promise<{ success: boolean; message: string; finalOrderId?: string }> => {
   markLocalMutation();
-  // Simpan dulu ke Outbox Queue agar 100% aman walau sinyal terputus atau tab ditutup
-  enqueueOrderForSync(order);
+  const baseId = getCanonicalOrderBaseId(order.id);
+
+  // Cegah pengiriman ganda jika pesanan ini sedang dikirim atau sudah tercatat di Sheet
+  if (inFlightOrderSyncs.has(baseId) || isOrderAlreadySynced(baseId)) {
+    removeOrderFromSyncQueue(order.id);
+    return {
+      success: true,
+      finalOrderId: baseId,
+      message: 'Pesanan sudah tercatat di Google Sheet.',
+    };
+  }
 
   if (!isRealAppsScriptUrl(config.webAppUrl)) {
+    enqueueOrderForSync(order);
     return {
       success: true,
       message: 'Tersimpan otomatis di antrean aman & siap dilanjutkan ke WhatsApp',
     };
   }
 
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const payload = {
-        action: 'create_order',
-        order: order,
-        spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
-      };
+  inFlightOrderSyncs.add(baseId);
 
-      const response = await fetch(config.webAppUrl.trim(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify(payload),
-      });
+  try {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const payload = {
+          action: 'create_order',
+          order: { ...order, id: baseId },
+          spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
+        };
 
-      const data = await response.json().catch(() => null);
+        const response = await fetch(config.webAppUrl.trim(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify(payload),
+        });
 
-      if (data && data.status === 'busy' && attempt < maxAttempts) {
-        // Jika banyak pesanan bersamaan dan lock sedang antre, tunggu sebentar lalu ulangi otomatis
-        await new Promise((r) => setTimeout(r, 900 * attempt));
-        continue;
-      }
+        const data = await response.json().catch(() => null);
 
-      // Berhasil tercatat di Google Sheet -> hapus dari Outbox Queue
-      removeOrderFromSyncQueue(order.id);
-      return {
-        success: true,
-        finalOrderId: data?.orderId || order.id,
-        message: 'Berhasil tercatat di Google Sheet (Anti-Bentrok Aktif)!',
-      };
-    } catch (err: any) {
-      if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 800 * attempt));
+        if (data && data.status === 'busy' && attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 900 * attempt));
+          continue;
+        }
+
+        // Berhasil tercatat di Google Sheet -> tandai sudah sinkron & hapus dari Outbox Queue
+        markOrderIdAsSynced(baseId);
+        removeOrderFromSyncQueue(order.id);
+        return {
+          success: true,
+          finalOrderId: baseId,
+          message: 'Berhasil tercatat di Google Sheet (Anti-Bentrok Aktif)!',
+        };
+      } catch (err: any) {
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 800 * attempt));
+        }
       }
     }
-  }
 
-  return {
-    success: false,
-    message: 'Pesanan diamankan di antrean latar belakang & akan otomatis dikirim ulang ke Sheet.',
-  };
+    // Hanya masukkan ke Outbox Queue jika seluruh percobaan jaringan gagal
+    enqueueOrderForSync(order);
+    return {
+      success: false,
+      message: 'Pesanan diamankan di antrean latar belakang & akan otomatis dikirim ulang ke Sheet.',
+    };
+  } finally {
+    inFlightOrderSyncs.delete(baseId);
+  }
 };
 
 /**
@@ -1432,7 +1603,13 @@ let isFlushingQueue = false;
 export const flushPendingOrdersQueue = async (
   config: GoogleSheetConfig
 ): Promise<string[]> => {
-  if (isFlushingQueue || !isRealAppsScriptUrl(config.webAppUrl)) return [];
+  if (
+    isFlushingQueue ||
+    !isRealAppsScriptUrl(config.webAppUrl) ||
+    isWithinMutationGracePeriod()
+  ) {
+    return [];
+  }
   const queue = loadPendingOrderQueue();
   if (queue.length === 0) return [];
 
@@ -1441,6 +1618,11 @@ export const flushPendingOrdersQueue = async (
 
   try {
     for (const pendingOrder of queue) {
+      const baseId = getCanonicalOrderBaseId(pendingOrder.id);
+      if (inFlightOrderSyncs.has(baseId) || isOrderAlreadySynced(baseId)) {
+        removeOrderFromSyncQueue(pendingOrder.id);
+        continue;
+      }
       const res = await syncOrderToGoogleAppsScript(pendingOrder, config);
       if (res.success) {
         syncedIds.push(pendingOrder.id);

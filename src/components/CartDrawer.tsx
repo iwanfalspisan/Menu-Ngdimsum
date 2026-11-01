@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { CartItem, Order, OrderType, StoreSettings } from '../types';
 import {
   formatCurrency,
@@ -35,6 +35,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   storeSettings,
   onOrderCreated,
 }) => {
+  const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      isSubmittingRef.current = false;
+    }
+  }, [isOpen]);
+
   const [customerName, setCustomerName] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('ngdimsum_customer_profile_v1');
@@ -168,6 +176,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       }
       return;
     }
+
+    if (isSubmittingRef.current) {
+      e.preventDefault();
+      return;
+    }
+    isSubmittingRef.current = true;
 
     setValidationError(null);
     try {

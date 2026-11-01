@@ -1,4 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   Order,
   OrderStatus,
@@ -15,6 +17,14 @@ import {
   resolveDriveImageUrl,
   downloadOrdersAsCsv,
 } from '../services/googleSheetsService';
+import {
+  searchAddressNominatim,
+  parseCoordinatesFromInput,
+  getGoogleMapsPinUrl,
+  normalizeCoordinates,
+  isCoordinateInIndonesia,
+  reverseGeocodeNominatim,
+} from '../services/distanceService';
 import {
   FileSpreadsheet,
   ExternalLink,
@@ -34,6 +44,9 @@ import {
   Download,
   ShoppingBag,
   BarChart3,
+  MapPin,
+  Navigation,
+  Loader2,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -137,6 +150,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const promoFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [deliveryFee, setDeliveryFee] = useState<number>(storeSettings.deliveryFeeFixed);
+  const [useDistanceDelivery, setUseDistanceDelivery] = useState<boolean>(
+    storeSettings.useDistanceDelivery !== false
+  );
+  const initialNormCoords = normalizeCoordinates(
+    storeSettings.storeLat ?? -7.303170618196189,
+    storeSettings.storeLng ?? 108.24690595305718
+  );
+  const [storeLat, setStoreLat] = useState<number>(initialNormCoords.lat);
+  const [storeLng, setStoreLng] = useState<number>(initialNormCoords.lng);
+  const [latInputText, setLatInputText] = useState<string>(String(initialNormCoords.lat));
+  const [lngInputText, setLngInputText] = useState<string>(String(initialNormCoords.lng));
+  const [deliveryFeePerKm, setDeliveryFeePerKm] = useState<number>(
+    storeSettings.deliveryFeePerKm ?? 2000
+  );
+  const [deliveryFeeMin, setDeliveryFeeMin] = useState<number>(
+    storeSettings.deliveryFeeMin ?? 8000
+  );
+  const [maxDeliveryDistanceKm, setMaxDeliveryDistanceKm] = useState<number>(
+    storeSettings.maxDeliveryDistanceKm ?? 25
+  );
+  const [storeCoordInput, setStoreCoordInput] = useState<string>(
+    `${initialNormCoords.lat}, ${initialNormCoords.lng}`
+  );
+  const [isLocatingStore, setIsLocatingStore] = useState<boolean>(false);
+  const [storeLocStatus, setStoreLocStatus] = useState<string>('');
   const [adminWhatsapp, setAdminWhatsapp] = useState(storeSettings.adminWhatsapp);
   const [storeAddress, setStoreAddress] = useState(storeSettings.storeAddress);
   const [openingHours, setOpeningHours] = useState(storeSettings.openingHours);
@@ -145,6 +183,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [qrisUploadMsg, setQrisUploadMsg] = useState<string>('');
   const [settingsSaved, setSettingsSaved] = useState(false);
   const qrisFileInputRef = useRef<HTMLInputElement | null>(null);
+  const adminMapContainerRef = useRef<HTMLDivElement | null>(null);
+  const adminMapInstanceRef = useRef<L.Map | null>(null);
+  const adminStoreMarkerRef = useRef<L.Marker | null>(null);
 
   // PIN modal
   const [showPinModal, setShowPinModal] = useState(false);
@@ -368,8 +409,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Sync local form state when storeSettings updates via 2-way Google Sheet sync
+  // Sync local form state when storeSettings updates via 2-way Google Sheet sync (skip while editing in settings tab so admin edits are never interrupted)
   React.useEffect(() => {
+    if (adminTab === 'settings') return;
     setStoreNameInput(storeSettings.storeName || 'Ngdimsum');
     setTaglineInput(storeSettings.tagline ?? 'Dimsum Rumahan Fresh Dibuat dari Hati');
     setStoreLogoUrl(storeSettings.storeLogoUrl || '');
@@ -388,11 +430,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
     setPromoCategoryTarget(storeSettings.promoCategoryTarget || 'spesial');
     setDeliveryFee(storeSettings.deliveryFeeFixed);
+    setUseDistanceDelivery(storeSettings.useDistanceDelivery !== false);
+    const normStore = normalizeCoordinates(
+      storeSettings.storeLat ?? -7.303170618196189,
+      storeSettings.storeLng ?? 108.24690595305718
+    );
+    setStoreLat(normStore.lat);
+    setStoreLng(normStore.lng);
+    setLatInputText(String(normStore.lat));
+    setLngInputText(String(normStore.lng));
+    setStoreCoordInput(`${normStore.lat}, ${normStore.lng}`);
+    setDeliveryFeePerKm(storeSettings.deliveryFeePerKm ?? 2000);
+    setDeliveryFeeMin(storeSettings.deliveryFeeMin ?? 8000);
+    setMaxDeliveryDistanceKm(storeSettings.maxDeliveryDistanceKm ?? 25);
     setAdminWhatsapp(storeSettings.adminWhatsapp);
-    setStoreAddress(storeSettings.storeAddress);
+    setStoreAddress(storeSettings.storeAddress || '');
     setOpeningHours(storeSettings.openingHours);
     setCustomQrisImage(storeSettings.customQrisImageUrl || '');
   }, [
+    adminTab,
     storeSettings.storeName,
     storeSettings.tagline,
     storeSettings.storeLogoUrl,
@@ -404,14 +460,220 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     storeSettings.promoImageUrl,
     storeSettings.promoCategoryTarget,
     storeSettings.deliveryFeeFixed,
+    storeSettings.useDistanceDelivery,
+    storeSettings.storeLat,
+    storeSettings.storeLng,
+    storeSettings.deliveryFeePerKm,
+    storeSettings.deliveryFeeMin,
+    storeSettings.maxDeliveryDistanceKm,
     storeSettings.adminWhatsapp,
     storeSettings.storeAddress,
     storeSettings.openingHours,
     storeSettings.customQrisImageUrl,
   ]);
 
+  // Helper untuk langsung menerapkan & menyimpan titik koordinat penjual baru saat berpindah tempat agar peta langsung sinkron
+  const applyStoreCoordinatesInstant = (
+    rawLat: number,
+    rawLng: number,
+    statusText?: string,
+    overrideAddress?: string
+  ) => {
+    const updated = normalizeCoordinates(rawLat, rawLng);
+    const nextAddress = overrideAddress !== undefined ? overrideAddress : storeAddress;
+    setStoreLat(updated.lat);
+    setStoreLng(updated.lng);
+    setLatInputText(String(updated.lat));
+    setLngInputText(String(updated.lng));
+    setStoreCoordInput(`${updated.lat}, ${updated.lng}`);
+    if (overrideAddress !== undefined) {
+      setStoreAddress(overrideAddress);
+    }
+    if (statusText) {
+      setStoreLocStatus(statusText);
+    }
+    try {
+      localStorage.setItem(
+        'ngdimsum_manual_store_coords_v1',
+        JSON.stringify({
+          lat: updated.lat,
+          lng: updated.lng,
+          address: nextAddress,
+          updatedAt: Date.now(),
+        })
+      );
+    } catch (e) {}
+    onUpdateStoreSettings({
+      ...storeSettings,
+      storeLat: updated.lat,
+      storeLng: updated.lng,
+      storeAddress: nextAddress,
+    });
+  };
+
+  // Inisialisasi & Sinkronisasi Peta Leaflet untuk Titik Koordinat Toko di Pengaturan Admin
+  useEffect(() => {
+    if (adminTab !== 'settings' || !useDistanceDelivery || !adminMapContainerRef.current) {
+      if (adminMapInstanceRef.current) {
+        adminMapInstanceRef.current.remove();
+        adminMapInstanceRef.current = null;
+        adminStoreMarkerRef.current = null;
+      }
+      return;
+    }
+
+    const norm = normalizeCoordinates(storeLat, storeLng);
+
+    if (!adminMapInstanceRef.current) {
+      const map = L.map(adminMapContainerRef.current, {
+        center: [norm.lat, norm.lng],
+        zoom: 16,
+        zoomControl: true,
+        attributionControl: true,
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap',
+      }).addTo(map);
+
+      const storeIcon = L.divIcon({
+        className: 'ngdimsum-admin-store-pin',
+        html: `<div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%);cursor:grab;">
+          <div style="background:#e11d48;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:9999px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.25);border:1.5px solid #fff;margin-bottom:2px;">
+            Toko Penjual (Geser)
+          </div>
+          <div style="width:26px;height:26px;background:#e11d48;border:2.5px solid #fff;border-radius:9999px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.35);">
+            <div style="width:8px;height:8px;background:#fff;border-radius:9999px;"></div>
+          </div>
+        </div>`,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      const marker = L.marker([norm.lat, norm.lng], {
+        icon: storeIcon,
+        draggable: true,
+      }).addTo(map);
+
+      marker.on('dragend', () => {
+        const pos = marker.getLatLng();
+        applyStoreCoordinatesInstant(
+          pos.lat,
+          pos.lng,
+          `Pin toko digeser & langsung disimpan: ${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`
+        );
+      });
+
+      map.on('click', (e: L.LeafletMouseEvent) => {
+        applyStoreCoordinatesInstant(
+          e.latlng.lat,
+          e.latlng.lng,
+          `Titik toko dipilih & langsung disimpan: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`
+        );
+      });
+
+      adminMapInstanceRef.current = map;
+      adminStoreMarkerRef.current = marker;
+
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 200);
+    } else {
+      adminStoreMarkerRef.current?.setLatLng([norm.lat, norm.lng]);
+      adminMapInstanceRef.current.invalidateSize();
+      adminMapInstanceRef.current.setView([norm.lat, norm.lng], 16);
+    }
+  }, [adminTab, useDistanceDelivery, storeLat, storeLng]);
+
+  const handleGetStoreGps = () => {
+    if (!navigator.geolocation) {
+      setStoreLocStatus('Browser tidak mendukung GPS otomatis.');
+      return;
+    }
+    setIsLocatingStore(true);
+    setStoreLocStatus('Mengambil titik GPS lokasi dapur...');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const norm = normalizeCoordinates(
+          pos.coords.latitude,
+          pos.coords.longitude
+        );
+        // Cegah jika GPS browser di PC/Laptop mendeteksi IP server luar negeri (misal Amerika Serikat)
+        if (!isCoordinateInIndonesia(norm.lat, norm.lng)) {
+          if (storeAddress.trim().length >= 3) {
+            const addrRes = await searchAddressNominatim(storeAddress.trim());
+            if (addrRes.length > 0) {
+              applyStoreCoordinatesInstant(
+                addrRes[0].lat,
+                addrRes[0].lng,
+                `GPS PC berada di luar RI, koordinat otomatis disesuaikan ke alamat dapur: ${addrRes[0].lat.toFixed(6)}, ${addrRes[0].lng.toFixed(6)}`
+              );
+              setIsLocatingStore(false);
+              return;
+            }
+          }
+          setStoreLocStatus(
+            'GPS perangkat mendeteksi lokasi di luar Indonesia (efek IP PC/VPN). Silakan ketik nama Kecamatan/Kota dapur di kolom pencarian titik.'
+          );
+          setIsLocatingStore(false);
+          return;
+        }
+        applyStoreCoordinatesInstant(
+          norm.lat,
+          norm.lng,
+          `Berhasil! Titik GPS Dapur disimpan: ${norm.lat}, ${norm.lng}`
+        );
+        setIsLocatingStore(false);
+      },
+      () => {
+        setStoreLocStatus('Gagal mengakses GPS. Pastikan izin lokasi aktif.');
+        setIsLocatingStore(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const handleGeocodeStoreAddress = async () => {
+    const query = (storeCoordInput.trim() || storeAddress.trim());
+    if (!query) {
+      setStoreLocStatus('Isi koordinat, alamat dapur, atau link Google Maps terlebih dahulu.');
+      return;
+    }
+    setIsLocatingStore(true);
+    setStoreLocStatus('Mencari koordinat...');
+    try {
+      const direct = parseCoordinatesFromInput(query);
+      if (direct) {
+        applyStoreCoordinatesInstant(
+          direct.lat,
+          direct.lng,
+          `Koordinat berhasil diterapkan & disimpan: ${direct.lat}, ${direct.lng}`
+        );
+        setIsLocatingStore(false);
+        return;
+      }
+      const res = await searchAddressNominatim(query);
+      if (res.length > 0) {
+        applyStoreCoordinatesInstant(
+          res[0].lat,
+          res[0].lng,
+          `Titik ditemukan & disimpan: ${res[0].displayName.slice(0, 60)}...`
+        );
+      } else {
+        setStoreLocStatus(
+          'Koordinat tidak ditemukan. Coba ketik kecamatan/kota atau tempel koordinat Maps.'
+        );
+      }
+    } catch (e) {
+      setStoreLocStatus('Gagal mencari koordinat.');
+    } finally {
+      setIsLocatingStore(false);
+    }
+  };
+
   // Save Settings (Logo, Nama Toko, Tagline, Banner Promo, Ongkir, dll)
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanedLogoUrl = storeLogoUrl.trim()
       ? resolveDriveImageUrl(storeLogoUrl.trim())
@@ -425,6 +687,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setStoreLogoUrl(cleanedLogoUrl);
     setPromoImageUrl(cleanedPromoImgUrl);
     setCustomQrisImage(cleanedQrisUrl);
+
+    let targetLat = storeLat;
+    let targetLng = storeLng;
+
+    // Cek apakah latInputText / lngInputText / storeCoordInput / storeAddress berisi pasangan koordinat
+    const fromCoordBox = parseCoordinatesFromInput(storeCoordInput.trim());
+    const fromLatBox = parseCoordinatesFromInput(latInputText.trim());
+    const fromAddressBox = parseCoordinatesFromInput(storeAddress.trim());
+
+    if (fromCoordBox) {
+      targetLat = fromCoordBox.lat;
+      targetLng = fromCoordBox.lng;
+    } else if (fromLatBox) {
+      targetLat = fromLatBox.lat;
+      targetLng = fromLatBox.lng;
+    } else if (fromAddressBox) {
+      targetLat = fromAddressBox.lat;
+      targetLng = fromAddressBox.lng;
+    } else {
+      const parsedLatNum = Number(latInputText.trim().replace(',', '.'));
+      const parsedLngNum = Number(lngInputText.trim().replace(',', '.'));
+      if (!isNaN(parsedLatNum) && parsedLatNum !== 0) targetLat = parsedLatNum;
+      if (!isNaN(parsedLngNum) && parsedLngNum !== 0) targetLng = parsedLngNum;
+    }
+
+    const normalized = normalizeCoordinates(targetLat, targetLng);
+    setStoreLat(normalized.lat);
+    setStoreLng(normalized.lng);
+    setLatInputText(String(normalized.lat));
+    setLngInputText(String(normalized.lng));
+    setStoreCoordInput(`${normalized.lat}, ${normalized.lng}`);
+    setStoreLocStatus(
+      `Titik koordinat penjual disimpan: ${normalized.lat}, ${normalized.lng}`
+    );
+
     onUpdateStoreSettings({
       ...storeSettings,
       storeName: storeNameInput.trim() || 'Ngdimsum',
@@ -438,6 +735,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       promoImageUrl: cleanedPromoImgUrl,
       promoCategoryTarget,
       deliveryFeeFixed: Number(deliveryFee),
+      useDistanceDelivery,
+      storeLat: normalized.lat,
+      storeLng: normalized.lng,
+      deliveryFeePerKm: Number(deliveryFeePerKm),
+      deliveryFeeMin: Number(deliveryFeeMin),
+      maxDeliveryDistanceKm: Number(maxDeliveryDistanceKm),
       adminWhatsapp: adminWhatsapp.trim(),
       storeAddress: storeAddress.trim(),
       openingHours: openingHours.trim(),
@@ -765,9 +1068,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               : 'Ambil Sendiri'}
                           </span>
                           {order.customer.orderType === 'delivery' && (
-                            <span className="text-[10px] text-stone-400 line-clamp-1 max-w-[140px]">
-                              {order.customer.deliveryAddress}
-                            </span>
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] text-stone-400 line-clamp-1 max-w-[140px] block">
+                                {order.customer.deliveryAddress}
+                              </span>
+                              {order.customer.deliveryDistanceKm && (
+                                <span className="text-[10px] font-semibold text-emerald-700 block">
+                                  Jarak: {order.customer.deliveryDistanceKm} km
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
 
@@ -791,6 +1101,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {order.deliveryFee > 0 && (
                             <span className="text-[10px] text-stone-400 block">
                               Termasuk ongkir {formatCurrency(order.deliveryFee)}
+                              {order.customer.deliveryDistanceKm
+                                ? ` (${order.customer.deliveryDistanceKm} km)`
+                                : ''}
                             </span>
                           )}
                         </td>
@@ -1242,25 +1555,296 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               )}
             </div>
 
-            {/* Delivery fee editing */}
-            <div className="bg-rose-50/60 p-3.5 rounded-xl border border-rose-200 space-y-1.5">
-              <label className="block font-bold text-rose-950 text-xs">
-                Tarif Ongkos Kirim (Flat Kurir / Ojol):
-              </label>
-              <div className="relative max-w-xs">
-                <span className="absolute left-3 top-2 text-stone-500 font-bold">Rp</span>
-                <input
-                  type="number"
-                  required
-                  step={1000}
-                  value={deliveryFee}
-                  onChange={(e) => setDeliveryFee(Number(e.target.value))}
-                  className="w-full pl-9 pr-3 py-1.5 text-sm font-bold font-mono border border-rose-300 rounded-lg bg-white focus:outline-none focus:border-rose-500"
-                />
+            {/* Pengaturan Ongkos Kirim Sesuai Jarak (Per KM) atau Flat */}
+            <div className="bg-rose-50/60 p-4 rounded-xl border border-rose-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-rose-600" />
+                  <span className="font-bold text-rose-950 text-xs">
+                    Pengaturan Ongkos Kirim &amp; Jarak Lokasi Penjual
+                  </span>
+                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useDistanceDelivery}
+                    onChange={(e) => setUseDistanceDelivery(e.target.checked)}
+                    className="rounded text-rose-600 focus:ring-rose-500"
+                  />
+                  <span className="text-[11px] font-bold text-rose-900">
+                    {useDistanceDelivery ? 'Hitung Per KM Otomatis' : 'Tarif Flat (Tetap)'}
+                  </span>
+                </label>
               </div>
-              <span className="text-[11px] text-stone-500 block">
-                Tarif ini otomatis muncul saat pembeli memilih opsi <em>&quot;Pesan Antar (Kurir)&quot;</em> di Keranjang.
-              </span>
+
+              {useDistanceDelivery ? (
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block font-semibold text-stone-700 mb-1 text-[11px]">
+                        Tarif Ongkir Per KM:
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1.5 text-stone-500 font-bold text-xs">
+                          Rp
+                        </span>
+                        <input
+                          type="number"
+                          step={500}
+                          value={deliveryFeePerKm}
+                          onChange={(e) => setDeliveryFeePerKm(Number(e.target.value))}
+                          className="w-full pl-8 pr-2 py-1.5 text-xs font-bold font-mono border border-rose-300 rounded-lg bg-white focus:outline-none focus:border-rose-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-stone-700 mb-1 text-[11px]">
+                        Ongkir Minimum:
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1.5 text-stone-500 font-bold text-xs">
+                          Rp
+                        </span>
+                        <input
+                          type="number"
+                          step={1000}
+                          value={deliveryFeeMin}
+                          onChange={(e) => setDeliveryFeeMin(Number(e.target.value))}
+                          className="w-full pl-8 pr-2 py-1.5 text-xs font-bold font-mono border border-rose-300 rounded-lg bg-white focus:outline-none focus:border-rose-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-stone-700 mb-1 text-[11px]">
+                        Jarak Maksimal (KM):
+                      </label>
+                      <input
+                        type="number"
+                        step={1}
+                        value={maxDeliveryDistanceKm}
+                        onChange={(e) => setMaxDeliveryDistanceKm(Number(e.target.value))}
+                        className="w-full px-2.5 py-1.5 text-xs font-bold font-mono border border-rose-300 rounded-lg bg-white focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Koordinat Lokasi Penjual */}
+                  <div className="bg-white p-3 rounded-xl border border-rose-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-stone-800 text-[11px]">
+                        Titik Koordinat Lokasi Penjual (Titik Awal Pengiriman):
+                      </span>
+                      <a
+                        href={getGoogleMapsPinUrl(storeLat, storeLng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-semibold text-rose-600 hover:underline inline-flex items-center gap-0.5"
+                      >
+                        <span>Lihat Peta Dapur</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </div>
+
+                    {/* Input Gabungan Koordinat (Fleksibel saat berpindah tempat) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="block text-[10px] font-semibold text-rose-900">
+                          Input Titik Koordinat Lokasi Penjual Saat Ini (Bisa Ganti Kapan Saja Saat Pindah Tempat):
+                        </label>
+                        {storeCoordInput && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStoreCoordInput('');
+                              setStoreLocStatus('Silakan tempel atau ketik titik koordinat lokasi baru Anda.');
+                            }}
+                            className="text-[10px] text-rose-600 hover:underline font-semibold"
+                          >
+                            Kosongkan untuk Input Baru
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={storeCoordInput}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setStoreCoordInput(val);
+                            const pair = parseCoordinatesFromInput(val);
+                            if (pair) {
+                              applyStoreCoordinatesInstant(
+                                pair.lat,
+                                pair.lng,
+                                `Titik koordinat lokasi baru langsung diterapkan & disimpan: ${pair.lat}, ${pair.lng}`
+                              );
+                            }
+                          }}
+                          placeholder="Tempel koordinat baru (misal: -7.303170618196189, 108.24690595305718) atau nama lokasi"
+                          className="flex-1 min-w-0 px-2.5 py-1.5 text-xs font-mono border border-rose-300 rounded-lg bg-rose-50/40 focus:outline-none focus:border-rose-500"
+                        />
+                        <button
+                          type="button"
+                          disabled={isLocatingStore}
+                          onClick={handleGeocodeStoreAddress}
+                          className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-white rounded-lg text-[11px] font-semibold shrink-0"
+                        >
+                          Terapkan Titik
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] text-stone-500 mb-0.5">
+                          Latitude Penjual
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={latInputText}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setLatInputText(val);
+                            const pair = parseCoordinatesFromInput(val);
+                            if (pair) {
+                              applyStoreCoordinatesInstant(
+                                pair.lat,
+                                pair.lng,
+                                `Koordinat otomatis terdeteksi & disimpan: ${pair.lat}, ${pair.lng}`
+                              );
+                              return;
+                            }
+                            const num = Number(val.trim().replace(',', '.'));
+                            if (!isNaN(num) && num !== 0 && Math.abs(num) <= 90) {
+                              applyStoreCoordinatesInstant(num, storeLng);
+                            }
+                          }}
+                          placeholder="-7.3031706"
+                          className="w-full px-2.5 py-1 text-xs font-mono border border-stone-200 rounded-lg bg-stone-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-stone-500 mb-0.5">
+                          Longitude Penjual
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={lngInputText}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setLngInputText(val);
+                            const pair = parseCoordinatesFromInput(val);
+                            if (pair) {
+                              applyStoreCoordinatesInstant(
+                                pair.lat,
+                                pair.lng,
+                                `Koordinat otomatis terdeteksi & disimpan: ${pair.lat}, ${pair.lng}`
+                              );
+                              return;
+                            }
+                            const num = Number(val.trim().replace(',', '.'));
+                            if (!isNaN(num) && num !== 0 && Math.abs(num) <= 180) {
+                              applyStoreCoordinatesInstant(storeLat, num);
+                            }
+                          }}
+                          placeholder="108.2469059"
+                          className="w-full px-2.5 py-1 text-xs font-mono border border-stone-200 rounded-lg bg-stone-50"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        disabled={isLocatingStore}
+                        onClick={handleGetStoreGps}
+                        className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 disabled:bg-stone-300 text-white font-semibold rounded-lg text-[11px] flex items-center justify-center gap-1 shrink-0"
+                      >
+                        {isLocatingStore ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Navigation className="w-3 h-3" />
+                        )}
+                        <span>Ambil GPS Lokasi Saat Ini</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isLocatingStore}
+                        onClick={async () => {
+                          setIsLocatingStore(true);
+                          setStoreLocStatus('Mendeteksi nama jalan/alamat dari titik koordinat...');
+                          try {
+                            const addr = await reverseGeocodeNominatim(storeLat, storeLng);
+                            if (addr) {
+                              applyStoreCoordinatesInstant(
+                                storeLat,
+                                storeLng,
+                                `Alamat lokasi baru berhasil diisi dari titik koordinat.`,
+                                addr
+                              );
+                            } else {
+                              setStoreLocStatus('Nama jalan tidak ditemukan otomatis, silakan ketik manual atau kosongkan.');
+                            }
+                          } finally {
+                            setIsLocatingStore(false);
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 font-semibold rounded-lg text-[11px] flex items-center justify-center gap-1 shrink-0"
+                      >
+                        <MapPin className="w-3 h-3 text-rose-500" />
+                        <span>Deteksi Alamat dari Koordinat</span>
+                      </button>
+                    </div>
+
+                    {storeLocStatus && (
+                      <div className="text-[10px] text-emerald-700 font-medium">
+                        {storeLocStatus}
+                      </div>
+                    )}
+
+                    {/* Peta Leaflet Preview & Geser Pin Toko Penjual */}
+                    <div className="rounded-lg overflow-hidden border border-rose-200 bg-stone-50 mt-2">
+                      <div className="px-2.5 py-1 bg-rose-50 border-b border-rose-200 flex items-center justify-between text-[10px] text-rose-950">
+                        <span className="font-semibold">
+                          📍 Peta Titik Penjual (Klik peta / geser pin merah saat pindah lokasi)
+                        </span>
+                        <span className="font-mono text-[9px] bg-white px-1.5 py-0.5 rounded border border-rose-200">
+                          {Number(storeLat).toFixed(6)}, {Number(storeLng).toFixed(6)}
+                        </span>
+                      </div>
+                      <div
+                        ref={adminMapContainerRef}
+                        className="h-44 w-full z-0 cursor-crosshair"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5 pt-1">
+                  <label className="block font-bold text-rose-950 text-xs">
+                    Tarif Ongkos Kirim Flat (Tetap):
+                  </label>
+                  <div className="relative max-w-xs">
+                    <span className="absolute left-3 top-2 text-stone-500 font-bold">Rp</span>
+                    <input
+                      type="number"
+                      required
+                      step={1000}
+                      value={deliveryFee}
+                      onChange={(e) => setDeliveryFee(Number(e.target.value))}
+                      className="w-full pl-9 pr-3 py-1.5 text-sm font-bold font-mono border border-rose-300 rounded-lg bg-white focus:outline-none focus:border-rose-500"
+                    />
+                  </div>
+                  <span className="text-[11px] text-stone-500 block">
+                    Tarif flat ini dipakai jika perhitungan jarak otomatis dimatikan.
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Admin WhatsApp */}
@@ -1281,15 +1865,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </span>
             </div>
 
-            {/* Address */}
+            {/* Address (Opsional / Tidak Didefaultkan) */}
             <div>
-              <label className="block font-semibold text-stone-700 mb-1">
-                Alamat Dapur Rumah (Untuk Pengambilan Sendiri):
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-stone-700">
+                  Keterangan Alamat / Lokasi Penjual Saat Ini (Opsional — Tidak Didefaultkan):
+                </label>
+                {storeAddress && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStoreAddress('');
+                      applyStoreCoordinatesInstant(
+                        storeLat,
+                        storeLng,
+                        'Keterangan alamat dikosongkan. Peta menggunakan titik koordinat penjual.',
+                        ''
+                      );
+                    }}
+                    className="text-[10px] text-rose-600 hover:underline font-semibold"
+                  >
+                    Kosongkan Alamat
+                  </button>
+                )}
+              </div>
               <textarea
                 rows={2}
                 value={storeAddress}
-                onChange={(e) => setStoreAddress(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setStoreAddress(val);
+                  const pair = parseCoordinatesFromInput(val);
+                  if (pair) {
+                    applyStoreCoordinatesInstant(
+                      pair.lat,
+                      pair.lng,
+                      `Koordinat dari kolom alamat langsung diterapkan: ${pair.lat}, ${pair.lng}`,
+                      val
+                    );
+                  }
+                }}
+                placeholder="Kosongkan jika hanya menggunakan titik koordinat, atau isi nama tempat jualan saat ini..."
                 className="w-full px-3 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
               />
             </div>

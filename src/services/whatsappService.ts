@@ -32,6 +32,15 @@ export const createWhatsappAdminMessage = (order: Order, storeName: string = 'Ng
   let addressInfo = '';
   if (order.customer.orderType === 'delivery' && order.customer.deliveryAddress) {
     addressInfo = `\n📍 *Alamat Pengantaran:* ${order.customer.deliveryAddress}`;
+    if (order.customer.deliveryDistanceKm && order.customer.deliveryDistanceKm > 0) {
+      addressInfo += `\n📏 *Jarak dari Dapur:* ${order.customer.deliveryDistanceKm} km`;
+    }
+    if (
+      order.customer.deliveryLat !== undefined &&
+      order.customer.deliveryLng !== undefined
+    ) {
+      addressInfo += `\n🗺️ *Titik Maps:* https://www.google.com/maps?q=${order.customer.deliveryLat},${order.customer.deliveryLng}`;
+    }
   }
 
   let customerNotes = '';
@@ -39,9 +48,16 @@ export const createWhatsappAdminMessage = (order: Order, storeName: string = 'Ng
     customerNotes = `\n📝 *Catatan Tambahan:* ${order.customer.notes}`;
   }
 
+  const distanceSuffix =
+    order.customer.orderType === 'delivery' &&
+    order.customer.deliveryDistanceKm &&
+    order.customer.deliveryDistanceKm > 0
+      ? ` (${order.customer.deliveryDistanceKm} km)`
+      : '';
+
   const deliveryLine =
     order.customer.orderType === 'delivery'
-      ? `\nOngkos Kirim: ${formatCurrency(order.deliveryFee)}`
+      ? `\nOngkos Kirim${distanceSuffix}: ${formatCurrency(order.deliveryFee)}`
       : '';
 
   return `Halo *${storeName}*, saya mau pesan menu dimsum berikut:

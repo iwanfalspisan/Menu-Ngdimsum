@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f43f5e" />
+      <stop offset="100%" stop-color="#be123c" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fde68a" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <circle cx="256" cy="256" r="204" fill="none" stroke="url(#goldGrad)" stroke-width="6" opacity="0.45" />
+  <!-- Steam waves -->
+  <path d="M196 140 C186 120, 206 105, 196 86" fill="none" stroke="#fff1f2" stroke-width="12" stroke-linecap="round" opacity="0.85" />
+  <path d="M256 128 C246 108, 266 93, 256 74" fill="none" stroke="#fff1f2" stroke-width="12" stroke-linecap="round" opacity="0.95" />
+  <path d="M316 140 C306 120, 326 105, 316 86" fill="none" stroke="#fff1f2" stroke-width="12" stroke-linecap="round" opacity="0.85" />
+  <!-- Dimsum buns inside bamboo steamer -->
+  <circle cx="212" cy="232" r="46" fill="#fffbeb" stroke="#fde68a" stroke-width="6" />
+  <circle cx="300" cy="232" r="46" fill="#fffbeb" stroke="#fde68a" stroke-width="6" />
+  <circle cx="256" cy="205" r="50" fill="#ffffff" stroke="#fcd34d" stroke-width="6" />
+  <circle cx="256" cy="195" r="10" fill="#f97316" />
+  <circle cx="206" cy="224" r="8" fill="#f97316" />
+  <circle cx="306" cy="224" r="8" fill="#f97316" />
+  <!-- Steamer basket body -->
+  <rect x="126" y="246" width="260" height="44" rx="16" fill="url(#goldGrad)" />
+  <rect x="138" y="296" width="236" height="84" rx="22" fill="#fff1f2" />
+  <!-- Brand Kanji / Emblem -->
+  <text x="256" y="356" font-family="serif" font-size="52" font-weight="bold" fill="#be123c" text-anchor="middle">NGDIMSUM</text>
+</svg>

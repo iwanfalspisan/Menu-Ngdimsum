@@ -33,7 +33,7 @@ export const markLocalMutation = (): void => {
 };
 
 export const isWithinMutationGracePeriod = (): boolean => {
-  return Date.now() - lastLocalMutationTimestamp < 4500;
+  return Date.now() - lastLocalMutationTimestamp < 15000;
 };
 
 /**
@@ -126,7 +126,11 @@ export const deleteSingleOrderStorage = async (
       await fetch(config.webAppUrl.trim(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'delete_order', orderId }),
+        body: JSON.stringify({
+          action: 'delete_order',
+          orderId,
+          spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
+        }),
       });
     } catch (e) {}
   }
@@ -171,7 +175,10 @@ export const resetAllOrdersStorage = async (config?: GoogleSheetConfig): Promise
       await fetch(config.webAppUrl.trim(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'clear_orders' }),
+        body: JSON.stringify({
+          action: 'clear_orders',
+          spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
+        }),
       });
     } catch (e) {}
   }
@@ -966,6 +973,51 @@ function doPost(e) {
       });
     }
 
+    // 8. HAPUS 1 PESANAN DARI SHEET
+    if (action === 'delete_order') {
+      const orderId = String(payload.orderId || '');
+      const sheetOrders = ss.getSheetByName(SHEET_NAMES.ORDERS);
+      if (sheetOrders && sheetOrders.getLastRow() > 1) {
+        const ids = sheetOrders.getRange(2, 1, sheetOrders.getLastRow() - 1, 1).getValues();
+        for (let i = ids.length - 1; i >= 0; i--) {
+          if (String(ids[i][0]) === orderId) {
+            sheetOrders.deleteRow(i + 2);
+          }
+        }
+      }
+      const sheetItems = ss.getSheetByName(SHEET_NAMES.ITEMS);
+      if (sheetItems && sheetItems.getLastRow() > 1) {
+        const itemOrderIds = sheetItems.getRange(2, 1, sheetItems.getLastRow() - 1, 1).getValues();
+        for (let j = itemOrderIds.length - 1; j >= 0; j--) {
+          if (String(itemOrderIds[j][0]) === orderId) {
+            sheetItems.deleteRow(j + 2);
+          }
+        }
+      }
+      SpreadsheetApp.flush();
+      return createJsonResponse({
+        status: 'success',
+        message: 'Pesanan #' + orderId + ' dihapus dari Sheet'
+      });
+    }
+
+    // 9. KOSONGKAN RIWAYAT PESANAN DI SHEET
+    if (action === 'clear_orders') {
+      const sheetOrders = ss.getSheetByName(SHEET_NAMES.ORDERS);
+      if (sheetOrders && sheetOrders.getLastRow() > 1) {
+        sheetOrders.getRange(2, 1, sheetOrders.getLastRow() - 1, 16).clearContent();
+      }
+      const sheetItems = ss.getSheetByName(SHEET_NAMES.ITEMS);
+      if (sheetItems && sheetItems.getLastRow() > 1) {
+        sheetItems.getRange(2, 1, sheetItems.getLastRow() - 1, 8).clearContent();
+      }
+      SpreadsheetApp.flush();
+      return createJsonResponse({
+        status: 'success',
+        message: 'Seluruh riwayat pesanan di Sheet berhasil dikosongkan'
+      });
+    }
+
     return createJsonResponse({
       status: 'error',
       message: 'Aksi tidak dikenali: ' + action
@@ -1074,8 +1126,81 @@ export const fetchTwoWaySyncFromSheet = async (
       if (data.settings.deliveryFeeFixed !== undefined) {
         parsedSettings.deliveryFeeFixed = Number(data.settings.deliveryFeeFixed);
       }
-      if (data.settings.storeAddress)
-        parsedSettings.storeAddress = String(data.settings.storeAddress);
+      if (data.settings.useDistanceDelivery !== undefined) {
+        parsedSettings.useDistanceDelivery =
+          data.settings.useDistanceDelivery === true ||
+          String(data.settings.useDistanceDelivery).toLowerCase() === 'true';
+      }
+      if (data.settings.storeLat !== undefined && data.settings.storeLat !== '') {
+        const rawLatStr = String(data.settings.storeLat).trim();
+        if (rawLatStr.includes(',')) {
+          const parts = rawLatStr.split(',');
+          const pLat = Number(parts[0].trim());
+          const pLng = Number(parts[1]?.trim());
+          if (!isNaN(pLat) && !isNaN(pLng) && pLat !== 0 && pLng !== 0) {
+            parsedSettings.storeLat = pLat;
+            parsedSettings.storeLng = pLng;
+          }
+        } else {
+          const numLat = Number(rawLatStr.replace(',', '.'));
+          if (!isNaN(numLat) && numLat !== 0) {
+            parsedSettings.storeLat = numLat;
+          }
+        }
+      }
+      if (data.settings.storeLng !== undefined && data.settings.storeLng !== '') {
+        const rawLngStr = String(data.settings.storeLng).trim();
+        if (rawLngStr.includes(',') && parsedSettings.storeLat === undefined) {
+          const parts = rawLngStr.split(',');
+          const pLat = Number(parts[0].trim());
+          const pLng = Number(parts[1]?.trim());
+          if (!isNaN(pLat) && !isNaN(pLng) && pLat !== 0 && pLng !== 0) {
+            parsedSettings.storeLat = pLat;
+            parsedSettings.storeLng = pLng;
+          }
+        } else if (!rawLngStr.includes(',')) {
+          const numLng = Number(rawLngStr.replace(',', '.'));
+          if (!isNaN(numLng) && numLng !== 0) {
+            parsedSettings.storeLng = numLng;
+          }
+        }
+      }
+      if (data.settings.deliveryFeePerKm !== undefined && data.settings.deliveryFeePerKm !== '') {
+        parsedSettings.deliveryFeePerKm = Number(data.settings.deliveryFeePerKm);
+      }
+      if (data.settings.deliveryFeeMin !== undefined && data.settings.deliveryFeeMin !== '') {
+        parsedSettings.deliveryFeeMin = Number(data.settings.deliveryFeeMin);
+      }
+      if (data.settings.maxDeliveryDistanceKm !== undefined && data.settings.maxDeliveryDistanceKm !== '') {
+        parsedSettings.maxDeliveryDistanceKm = Number(data.settings.maxDeliveryDistanceKm);
+      }
+      if (data.settings.storeAddress !== undefined) {
+        const rawAddr = String(data.settings.storeAddress);
+        if (!rawAddr.includes('Jl. Raya Kelapa Gading, Jakarta Utara (Dapur Rumah)')) {
+          parsedSettings.storeAddress = rawAddr;
+        }
+      }
+      // Jika ada perubahan titik koordinat / alamat manual lokal yang belum terkirim ke Sheet (synced === false), utamakan simpanan lokal tersebut
+      try {
+        const manualSaved = localStorage.getItem('ngdimsum_manual_store_coords_v1');
+        if (manualSaved) {
+          const parsedManual = JSON.parse(manualSaved);
+          if (parsedManual.synced === false || !parsedSettings.storeLat || !parsedSettings.storeLng) {
+            if (
+              typeof parsedManual.lat === 'number' &&
+              typeof parsedManual.lng === 'number' &&
+              parsedManual.lat !== 0 &&
+              parsedManual.lng !== 0
+            ) {
+              parsedSettings.storeLat = parsedManual.lat;
+              parsedSettings.storeLng = parsedManual.lng;
+            }
+            if (typeof parsedManual.address === 'string' && parsedManual.synced === false) {
+              parsedSettings.storeAddress = parsedManual.address;
+            }
+          }
+        }
+      } catch (e) {}
       if (data.settings.openingHours)
         parsedSettings.openingHours = String(data.settings.openingHours);
       if (data.settings.customQrisImageUrl !== undefined) {
@@ -1139,6 +1264,7 @@ export const upsertMenuItemToSheet = async (
       body: JSON.stringify({
         action: 'upsert_menu_item',
         item,
+        spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
       }),
     });
     return true;
@@ -1163,6 +1289,7 @@ export const deleteMenuItemFromSheet = async (
       body: JSON.stringify({
         action: 'delete_menu_item',
         itemId,
+        spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
       }),
     });
     return true;
@@ -1187,6 +1314,7 @@ export const syncMenuToGoogleSheet = async (
       body: JSON.stringify({
         action: 'sync_menu',
         menuItems,
+        spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
       }),
     });
     return true;
@@ -1205,14 +1333,29 @@ export const syncSettingsToGoogleSheet = async (
   markLocalMutation();
   if (!isRealAppsScriptUrl(config.webAppUrl)) return false;
   try {
-    await fetch(config.webAppUrl.trim(), {
+    const res = await fetch(config.webAppUrl.trim(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action: 'sync_settings',
         settings,
+        spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
       }),
     });
+    if (res.ok) {
+      try {
+        localStorage.setItem(
+          'ngdimsum_manual_store_coords_v1',
+          JSON.stringify({
+            lat: settings.storeLat,
+            lng: settings.storeLng,
+            address: settings.storeAddress,
+            synced: true,
+            updatedAt: Date.now(),
+          })
+        );
+      } catch (e) {}
+    }
     return true;
   } catch (e) {
     return false;

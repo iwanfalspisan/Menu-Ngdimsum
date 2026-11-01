@@ -39,6 +39,7 @@ import { AdminLoginModal } from './components/AdminLoginModal';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { ReceiptModal } from './components/ReceiptModal';
 import { NotificationToast, ToastMessage } from './components/NotificationToast';
+import { OfflineIndicator, PWAInstallBanner } from './components/PWAInstallPrompt';
 import {
   Clock,
   Phone,
@@ -132,7 +133,44 @@ export default function App() {
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
     try {
       const saved = localStorage.getItem('ngdimsum_store_settings_v1');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (
+          parsed.storeLat === undefined ||
+          parsed.storeLng === undefined ||
+          parsed.storeLat === 0 ||
+          parsed.storeLng === 0
+        ) {
+          parsed.storeLat = DEFAULT_STORE_SETTINGS.storeLat;
+          parsed.storeLng = DEFAULT_STORE_SETTINGS.storeLng;
+        }
+        // Bersihkan teks alamat template bawaan lama jika masih ada, tanpa memaksa alamat default baru
+        if (
+          typeof parsed.storeAddress === 'string' &&
+          (parsed.storeAddress.includes('Kelapa Gading, Jakarta Utara') ||
+            parsed.storeAddress === 'Sindangkasih, Ciamis, Jawa Barat')
+        ) {
+          parsed.storeAddress = '';
+        }
+        // Cek simpanan manual koordinat & alamat toko terbaru dari Pengaturan Admin
+        const manualSaved = localStorage.getItem('ngdimsum_manual_store_coords_v1');
+        if (manualSaved) {
+          const manualCoord = JSON.parse(manualSaved);
+          if (
+            typeof manualCoord.lat === 'number' &&
+            typeof manualCoord.lng === 'number' &&
+            manualCoord.lat !== 0 &&
+            manualCoord.lng !== 0
+          ) {
+            parsed.storeLat = manualCoord.lat;
+            parsed.storeLng = manualCoord.lng;
+          }
+          if (typeof manualCoord.address === 'string') {
+            parsed.storeAddress = manualCoord.address;
+          }
+        }
+        return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -315,12 +353,34 @@ export default function App() {
   };
 
   const handleUpdateStoreSettings = (newSettings: StoreSettings) => {
+    try {
+      if (
+        typeof newSettings.storeLat === 'number' &&
+        typeof newSettings.storeLng === 'number' &&
+        newSettings.storeLat !== 0 &&
+        newSettings.storeLng !== 0
+      ) {
+        localStorage.setItem(
+          'ngdimsum_manual_store_coords_v1',
+          JSON.stringify({
+            lat: newSettings.storeLat,
+            lng: newSettings.storeLng,
+            address: newSettings.storeAddress || '',
+            synced: false,
+            updatedAt: Date.now(),
+          })
+        );
+      }
+    } catch (e) {}
     setStoreSettings(newSettings);
     syncSettingsToGoogleSheet(newSettings, googleSheetConfig);
     setToast({
       id: Date.now().toString(),
       title: 'Pengaturan Disimpan & Disinkronkan',
-      message: `Ongkir: Rp ${newSettings.deliveryFeeFixed.toLocaleString('id-ID')}`,
+      message:
+        newSettings.useDistanceDelivery !== false
+          ? `Ongkir: Rp ${(newSettings.deliveryFeePerKm ?? 2000).toLocaleString('id-ID')}/km (Titik Toko: ${newSettings.storeLat}, ${newSettings.storeLng})`
+          : `Ongkir Flat: Rp ${newSettings.deliveryFeeFixed.toLocaleString('id-ID')}`,
     });
   };
 
@@ -466,6 +526,7 @@ export default function App() {
   };
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+    markLocalMutation();
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId) {
@@ -607,6 +668,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#fdf5f5] text-stone-900 selection:bg-rose-200">
+      {/* Offline Indicator & Mobile PWA Install Banner */}
+      <OfflineIndicator />
+      <PWAInstallBanner
+        storeName={storeSettings.storeName}
+        storeLogoUrl={storeSettings.storeLogoUrl}
+      />
+
       {/* Top Bar */}
       <Navbar
         activeTab={activeTab}

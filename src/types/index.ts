@@ -54,6 +54,9 @@ export interface OrderCustomer {
   orderType: OrderType;
   tableNumber?: string;
   deliveryAddress?: string;
+  deliveryDistanceKm?: number;
+  deliveryLat?: number;
+  deliveryLng?: number;
   notes?: string;
 }
 
@@ -125,6 +128,12 @@ export interface StoreSettings {
   packagingFeeDineIn: number;
   packagingFeeTakeaway: number;
   deliveryFeeFixed: number;
+  useDistanceDelivery?: boolean;
+  storeLat?: number;
+  storeLng?: number;
+  deliveryFeePerKm?: number;
+  deliveryFeeMin?: number;
+  maxDeliveryDistanceKm?: number;
   estimatedPrepTimeBase: number;
   promoEnabled?: boolean;
   promoBadge?: string;

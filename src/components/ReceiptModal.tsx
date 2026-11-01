@@ -103,7 +103,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             )}
             {order.deliveryFee > 0 && (
               <div className="flex justify-between">
-                <span>Ongkir:</span>
+                <span>
+                  Ongkir
+                  {order.customer.deliveryDistanceKm
+                    ? ` (${order.customer.deliveryDistanceKm} km)`
+                    : ''}
+                  :
+                </span>
                 <span>{formatCurrency(order.deliveryFee)}</span>
               </div>
             )}

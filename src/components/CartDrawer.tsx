@@ -4,6 +4,8 @@ import {
   formatCurrency,
   getAdminWhatsappUrl,
 } from '../services/whatsappService';
+import { calculateDeliveryFeeFromDistance } from '../services/distanceService';
+import { DistanceCalculatorBox } from './DistanceCalculatorBox';
 import {
   X,
   Trash2,
@@ -48,13 +50,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     return '';
   });
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
-  const [deliveryAddress, setDeliveryAddress] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('ngdimsum_customer_profile_v1');
-      if (saved) return JSON.parse(saved).address || '';
-    } catch (e) {}
-    return '';
-  });
+  const [deliveryAddress, setDeliveryAddress] = useState<string>('');
+  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number | null>(null);
+  const [buyerCoords, setBuyerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [customerNotes, setCustomerNotes] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -64,7 +62,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   );
 
   const deliveryFee =
-    orderType === 'delivery' ? storeSettings?.deliveryFeeFixed || 10000 : 0;
+    orderType === 'delivery'
+      ? calculateDeliveryFeeFromDistance(deliveryDistanceKm, storeSettings)
+      : 0;
   const totalAmount = subtotal + deliveryFee;
 
   // Generate collision-proof order ID
@@ -89,6 +89,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         orderType,
         deliveryAddress:
           orderType === 'delivery' ? deliveryAddress.trim() : undefined,
+        deliveryDistanceKm:
+          orderType === 'delivery' && deliveryDistanceKm ? deliveryDistanceKm : undefined,
+        deliveryLat:
+          orderType === 'delivery' && buyerCoords ? buyerCoords.lat : undefined,
+        deliveryLng:
+          orderType === 'delivery' && buyerCoords ? buyerCoords.lng : undefined,
         notes: customerNotes.trim() || undefined,
       },
       items: items.map((c) => ({
@@ -129,6 +135,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       customerPhone,
       orderType,
       deliveryAddress,
+      deliveryDistanceKm,
+      buyerCoords,
       customerNotes,
       items,
       subtotal,
@@ -169,6 +177,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           name: customerName.trim(),
           phone: customerPhone.trim(),
           address: deliveryAddress.trim(),
+          distanceKm: deliveryDistanceKm,
+          lat: buyerCoords?.lat,
+          lng: buyerCoords?.lng,
         })
       );
     } catch (err) {}
@@ -384,21 +395,33 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         </div>
 
                         {orderType === 'delivery' && (
-                          <div>
-                            <label className="block text-[11px] font-semibold text-stone-700 mb-1">
-                              Alamat Lengkap Pengantaran *
-                            </label>
-                            <textarea
-                              rows={2}
-                              value={deliveryAddress}
-                              onChange={(e) => {
-                                setDeliveryAddress(e.target.value);
-                                if (validationError) setValidationError(null);
-                              }}
-                              placeholder="Nama jalan, nomor rumah, patokan..."
-                              className="w-full px-3 py-1.5 text-xs bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
-                            />
-                          </div>
+                          <DistanceCalculatorBox
+                            storeSettings={storeSettings}
+                            deliveryAddress={deliveryAddress}
+                            onChangeAddress={(addr) => setDeliveryAddress(addr)}
+                            distanceKm={deliveryDistanceKm}
+                            buyerCoords={buyerCoords}
+                            onDistanceCalculated={(km, coords) => {
+                              setDeliveryDistanceKm(km);
+                              setBuyerCoords(coords);
+                              try {
+                                const saved = localStorage.getItem('ngdimsum_customer_profile_v1');
+                                const prev = saved ? JSON.parse(saved) : {};
+                                localStorage.setItem(
+                                  'ngdimsum_customer_profile_v1',
+                                  JSON.stringify({
+                                    ...prev,
+                                    distanceKm: km,
+                                    lat: coords?.lat,
+                                    lng: coords?.lng,
+                                  })
+                                );
+                              } catch (e) {}
+                            }}
+                            onClearValidation={() => {
+                              if (validationError) setValidationError(null);
+                            }}
+                          />
                         )}
 
                         <div>
@@ -431,7 +454,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
                     {deliveryFee > 0 && (
                       <div className="flex justify-between text-stone-600 text-xs">
-                        <span>Ongkos Kirim</span>
+                        <span>
+                          Ongkos Kirim
+                          {deliveryDistanceKm &&
+                          deliveryDistanceKm <= 200 &&
+                          storeSettings?.useDistanceDelivery !== false
+                            ? ` (${deliveryDistanceKm} km)`
+                            : ''}
+                        </span>
                         <span className="font-mono tabular-nums text-stone-900">
                           {formatCurrency(deliveryFee)}
                         </span>

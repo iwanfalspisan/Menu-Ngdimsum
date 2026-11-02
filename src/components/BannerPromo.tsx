@@ -16,9 +16,11 @@ export const BannerPromo: React.FC<BannerPromoProps> = ({
     storeSettings.promoTitle ||
     'Dimsum Mentai Bakar Tobiko & Siomay Ayam Udang';
   const promoBadge = storeSettings.promoBadge || 'PROMO SPESIAL HARI INI';
-  const promoDescription =
+  const storeName = storeSettings.storeName || 'Ngdimsum';
+  const rawPromoDesc =
     storeSettings.promoDescription ||
-    'Hangat baru dikukus dari dapur rumah, gratis Chili Oil khas Ngdimsum setiap pemesanan via WhatsApp!';
+    `Hangat baru dikukus dari ${storeName}, gratis Chili Oil khas ${storeName} setiap pemesanan via WhatsApp!`;
+  const promoDescription = rawPromoDesc.replace(/dapur rumahan|dapur rumah/gi, storeName);
   const promoHighlightText =
     storeSettings.promoHighlightText || 'Mulai Rp 25.000';
   const promoImageUrl =

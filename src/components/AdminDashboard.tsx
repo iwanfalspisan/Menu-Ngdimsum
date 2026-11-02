@@ -7,7 +7,12 @@ import {
   MenuItem,
   GoogleSheetConfig,
   StoreSettings,
+  CategoryItem,
 } from '../types';
+import {
+  DEFAULT_CATEGORIES,
+  DEFAULT_SAMBAL_OPTIONS,
+} from '../data/dimsumMenu';
 import {
   formatCurrency,
   getCustomerWhatsappUrl,
@@ -47,6 +52,9 @@ import {
   MapPin,
   Navigation,
   Loader2,
+  Flame,
+  Tag,
+  X,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -101,7 +109,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showAddMenuModal, setShowAddMenuModal] = useState(false);
   const [editingMenuId, setEditingMenuId] = useState<string | null>(null);
   const [newMenuName, setNewMenuName] = useState('');
-  const [newMenuCategory, setNewMenuCategory] = useState<'kukus' | 'goreng' | 'spesial' | 'minuman'>('kukus');
+  const [newMenuCategory, setNewMenuCategory] = useState<string>('kukus');
   const [newMenuPrice, setNewMenuPrice] = useState<number>(25000);
   const [newMenuPieces, setNewMenuPieces] = useState('4 pcs');
   const [newMenuPrepTime, setNewMenuPrepTime] = useState<number>(12);
@@ -112,12 +120,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newMenuImage, setNewMenuImage] = useState<string>('/images/dimsum_siomay_hakau_platter_1792773517046.jpg');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [uploadStatusMsg, setUploadStatusMsg] = useState<string>('');
+  const [newMenuSambalOptions, setNewMenuSambalOptions] = useState<string[]>([
+    'Chili Oil',
+    'Sambal Merah / Bangkok',
+    'Tanpa Sambal',
+  ]);
+  const [newMenuSambalInput, setNewMenuSambalInput] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Kategori Management State
+  const [newCategoryLabel, setNewCategoryLabel] = useState('');
+
+  const activeCategories: CategoryItem[] =
+    storeSettings.categories && storeSettings.categories.length > 0
+      ? storeSettings.categories
+      : DEFAULT_CATEGORIES;
+
+  const activeSambals: string[] =
+    storeSettings.sambalOptions && storeSettings.sambalOptions.length > 0
+      ? storeSettings.sambalOptions
+      : DEFAULT_SAMBAL_OPTIONS;
+
+  const handleAddSambalToMenuForm = () => {
+    const val = newMenuSambalInput.trim();
+    if (!val) return;
+    if (!newMenuSambalOptions.some((s) => s.toLowerCase() === val.toLowerCase())) {
+      setNewMenuSambalOptions((prev) => [...prev, val]);
+    }
+    setNewMenuSambalInput('');
+  };
+
+  const handleRemoveSambalFromMenuForm = (sambalName: string) => {
+    setNewMenuSambalOptions((prev) => prev.filter((s) => s !== sambalName));
+  };
+
+  const getCategoryDisplayLabel = (catId: string): string => {
+    const found = activeCategories.find((c) => c.id === catId);
+    return found ? found.label : catId;
+  };
+
+  const handleAddCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const label = newCategoryLabel.trim();
+    if (!label) return;
+    const slug = label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (!slug) return;
+    if (activeCategories.some((c) => c.id === slug || c.label.toLowerCase() === label.toLowerCase())) {
+      setNewCategoryLabel('');
+      return;
+    }
+    const nextCategories = [...activeCategories, { id: slug, label }];
+    onUpdateStoreSettings({
+      ...storeSettings,
+      categories: nextCategories,
+    });
+    setNewCategoryLabel('');
+  };
+
+  const handleDeleteCategory = (catId: string) => {
+    if (activeCategories.length <= 1) return;
+    const nextCategories = activeCategories.filter((c) => c.id !== catId);
+    onUpdateStoreSettings({
+      ...storeSettings,
+      categories: nextCategories,
+    });
+  };
 
   // Settings State (Logo, Nama Toko, Tagline, Banner Promo, Ongkos Kirim, dll)
   const [storeNameInput, setStoreNameInput] = useState<string>(storeSettings.storeName || 'Ngdimsum');
   const [taglineInput, setTaglineInput] = useState<string>(
-    storeSettings.tagline ?? 'Dimsum Rumahan Fresh Dibuat dari Hati'
+    (storeSettings.tagline ?? 'Dimsum Fresh Dibuat dari Hati').replace(/Dimsum Rumahan/gi, storeSettings.storeName || 'Dimsum')
   );
   const [storeLogoUrl, setStoreLogoUrl] = useState<string>(storeSettings.storeLogoUrl || '');
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -133,8 +208,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     storeSettings.promoTitle || 'Dimsum Mentai Bakar Tobiko & Siomay Ayam Udang'
   );
   const [promoDescription, setPromoDescription] = useState<string>(
-    storeSettings.promoDescription ||
-      'Hangat baru dikukus dari dapur rumah, gratis Chili Oil khas Ngdimsum setiap pemesanan via WhatsApp!'
+    (
+      storeSettings.promoDescription ||
+      `Hangat baru dikukus dari ${storeSettings.storeName || 'Ngdimsum'}, gratis Chili Oil khas ${storeSettings.storeName || 'Ngdimsum'} setiap pemesanan via WhatsApp!`
+    ).replace(/dapur rumahan|dapur rumah/gi, storeSettings.storeName || 'Ngdimsum')
   );
   const [promoHighlightText, setPromoHighlightText] = useState<string>(
     storeSettings.promoHighlightText || 'Mulai Rp 25.000'
@@ -270,7 +347,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenAddModal = () => {
     setEditingMenuId(null);
     setNewMenuName('');
-    setNewMenuCategory('kukus');
+    setNewMenuCategory(activeCategories[0]?.id || 'kukus');
     setNewMenuPrice(25000);
     setNewMenuPieces('4 pcs');
     setNewMenuPrepTime(12);
@@ -279,6 +356,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewMenuIsSpicy(false);
     setNewMenuIsChef(false);
     setNewMenuImage('/images/dimsum_siomay_hakau_platter_1792773517046.jpg');
+    setNewMenuSambalOptions(['Chili Oil', 'Sambal Merah / Bangkok', 'Tanpa Sambal']);
+    setNewMenuSambalInput('');
     setUploadStatusMsg('');
     setShowAddMenuModal(true);
   };
@@ -295,6 +374,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewMenuIsSpicy(!!item.isSpicy);
     setNewMenuIsChef(!!item.isChefsPick);
     setNewMenuImage(item.image);
+    const isDrinkCat =
+      item.category.toLowerCase().includes('minum') ||
+      item.category.toLowerCase().includes('teh');
+    const existingSambals = Array.isArray(item.sambalOptions)
+      ? item.sambalOptions
+      : isDrinkCat || item.hasSambal === false
+      ? []
+      : [...activeSambals];
+    setNewMenuSambalOptions(existingSambals);
+    setNewMenuSambalInput('');
     setUploadStatusMsg('');
     setShowAddMenuModal(true);
   };
@@ -308,6 +397,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const existing = editingMenuId ? menuItems.find((m) => m.id === editingMenuId) : null;
 
+    // Jika penjual mengetik nama sambal di input namun langsung menekan Simpan, sertakan otomatis
+    const pendingSambal = newMenuSambalInput.trim();
+    const finalMenuSambals =
+      pendingSambal &&
+      !newMenuSambalOptions.some((s) => s.toLowerCase() === pendingSambal.toLowerCase())
+        ? [...newMenuSambalOptions, pendingSambal]
+        : [...newMenuSambalOptions];
+
     const itemPayload: MenuItem = {
       id: editingMenuId || `dm-cust-${Date.now().toString().slice(-5)}`,
       name: newMenuName.trim(),
@@ -315,13 +412,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       price: Number(newMenuPrice),
       pieces: newMenuPieces.trim() || '4 pcs',
       prepTimeMinutes: Number(newMenuPrepTime) || 12,
-      description: newMenuDesc.trim() || 'Dimsum lezat buatan dapur rumah Ngdimsum.',
+      description: newMenuDesc.trim() || `Menu spesial lezat buatan ${storeSettings.storeName || 'Ngdimsum'}.`,
       image: resolveDriveImageUrl(newMenuImage),
       isPopular: newMenuIsPopular,
       isSpicy: newMenuIsSpicy,
       isChefsPick: newMenuIsChef,
       isHalal: true,
       inStock: existing ? existing.inStock : true,
+      hasSambal: finalMenuSambals.length > 0,
+      sambalOptions: finalMenuSambals,
     };
 
     if (editingMenuId) {
@@ -334,6 +433,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingMenuId(null);
     setNewMenuName('');
     setNewMenuDesc('');
+    setNewMenuSambalInput('');
     setUploadStatusMsg('');
   };
 
@@ -413,7 +513,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   React.useEffect(() => {
     if (adminTab === 'settings') return;
     setStoreNameInput(storeSettings.storeName || 'Ngdimsum');
-    setTaglineInput(storeSettings.tagline ?? 'Dimsum Rumahan Fresh Dibuat dari Hati');
+    setTaglineInput(
+      (storeSettings.tagline ?? 'Dimsum Fresh Dibuat dari Hati').replace(
+        /Dimsum Rumahan/gi,
+        storeSettings.storeName || 'Dimsum'
+      )
+    );
     setStoreLogoUrl(storeSettings.storeLogoUrl || '');
     setPromoEnabled(storeSettings.promoEnabled !== false);
     setPromoBadge(storeSettings.promoBadge || 'PROMO SPESIAL HARI INI');
@@ -421,8 +526,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       storeSettings.promoTitle || 'Dimsum Mentai Bakar Tobiko & Siomay Ayam Udang'
     );
     setPromoDescription(
-      storeSettings.promoDescription ||
-        'Hangat baru dikukus dari dapur rumah, gratis Chili Oil khas Ngdimsum setiap pemesanan via WhatsApp!'
+      (
+        storeSettings.promoDescription ||
+        `Hangat baru dikukus dari ${storeSettings.storeName || 'Ngdimsum'}, gratis Chili Oil khas ${storeSettings.storeName || 'Ngdimsum'} setiap pemesanan via WhatsApp!`
+      ).replace(/dapur rumahan|dapur rumah/gi, storeSettings.storeName || 'Ngdimsum')
     );
     setPromoHighlightText(storeSettings.promoHighlightText || 'Mulai Rp 25.000');
     setPromoImageUrl(
@@ -1061,15 +1168,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           )}
                         </td>
 
-                        <td className="py-3 px-3.5 whitespace-nowrap">
+                        <td className="py-3 px-3.5">
                           <span className="font-semibold capitalize block">
                             {order.customer.orderType === 'delivery'
                               ? 'Pesan Antar'
                               : 'Ambil Sendiri'}
                           </span>
                           {order.customer.orderType === 'delivery' && (
-                            <div className="space-y-0.5">
-                              <span className="text-[10px] text-stone-400 line-clamp-1 max-w-[140px] block">
+                            <div className="space-y-0.5 max-w-[200px]">
+                              <span
+                                className="text-[10px] text-stone-600 line-clamp-2 block leading-snug"
+                                title={order.customer.deliveryAddress}
+                              >
                                 {order.customer.deliveryAddress}
                               </span>
                               {order.customer.deliveryDistanceKm && (
@@ -1086,8 +1196,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {order.items.map((it, idx) => (
                               <div key={idx} className="text-[11px]">
                                 <strong>{it.quantity}x</strong> {it.name}
-                                {it.chiliLevel && it.chiliLevel !== 'Normal' && (
-                                  <span className="text-rose-600 ml-1">[{it.chiliLevel}]</span>
+                                {it.chiliLevel && (
+                                  <span className="text-rose-600 font-medium ml-1">
+                                    [Sambal: {it.chiliLevel}]
+                                  </span>
                                 )}
                               </div>
                             ))}
@@ -1154,10 +1266,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* TAB 2: KELOLA MENU DIMSUM (TAMBAH / HAPUS / UPLOAD DRIVE)  */}
+      {/* TAB 2: KELOLA MENU DIMSUM, KATEGORI & PILIHAN SAMBAL      */}
       {/* ======================================================== */}
       {adminTab === 'menu' && (
         <div className="space-y-4">
+          {/* Panel Kelola Kategori Menu (Tambah & Hapus Kategori) */}
+          <div className="bg-white p-4 rounded-xl border border-rose-100 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Tag className="w-4 h-4 text-rose-500" />
+                <h3 className="font-bold text-xs text-stone-900">
+                  Kelola Kategori Menu ({activeCategories.length})
+                </h3>
+              </div>
+              <span className="text-[10px] text-stone-400">Bisa tambah &amp; hapus kategori</span>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {activeCategories.map((cat) => (
+                <div
+                  key={cat.id}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-900"
+                >
+                  <span>{cat.label}</span>
+                  {activeCategories.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(cat.id)}
+                      className="text-rose-400 hover:text-rose-700 p-0.5 rounded-full hover:bg-rose-100 transition-colors"
+                      title={`Hapus kategori ${cat.label}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleAddCategory} className="flex gap-2">
+              <input
+                type="text"
+                value={newCategoryLabel}
+                onChange={(e) => setNewCategoryLabel(e.target.value)}
+                placeholder="Ketik nama kategori baru (misal: Paket Hemat / Frozen)"
+                className="flex-1 min-w-0 px-3 py-1.5 text-xs border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
+              />
+              <button
+                type="submit"
+                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-lg flex items-center gap-1 shrink-0 transition-colors shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tambah Kategori</span>
+              </button>
+            </form>
+          </div>
+
           <div className="bg-white p-4 rounded-xl border border-rose-100 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-2.5" />
@@ -1211,15 +1374,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="text-[11px] text-stone-500 line-clamp-1 max-w-xs">
                           {item.description}
                         </div>
-                        <div className="flex items-center gap-1 mt-0.5 text-[10px]">
+                        <div className="flex flex-wrap items-center gap-1 mt-0.5 text-[10px]">
                           {item.isPopular && <span className="text-rose-600 font-semibold">★ Favorit</span>}
                           {item.isChefsPick && <span className="text-amber-700 font-semibold">· Rekomendasi</span>}
                           {item.isSpicy && <span className="text-rose-500 font-semibold">· Pedas</span>}
                         </div>
+                        {(() => {
+                          const isDrinkCat =
+                            item.category.toLowerCase().includes('minum') ||
+                            item.category.toLowerCase().includes('teh');
+                          const menuSambals = Array.isArray(item.sambalOptions)
+                            ? item.sambalOptions
+                            : isDrinkCat || item.hasSambal === false
+                            ? []
+                            : activeSambals;
+                          return menuSambals.length > 0 && item.hasSambal !== false ? (
+                            <div className="flex flex-wrap items-center gap-1 mt-1">
+                              {menuSambals.map((sb, sIdx) => (
+                                <span
+                                  key={sIdx}
+                                  className="px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-[9px] font-semibold text-amber-900"
+                                >
+                                  🌶️ {sb}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-stone-400 mt-0.5">
+                              Tanpa pilihan sambal
+                            </div>
+                          );
+                        })()}
                       </td>
 
-                      <td className="py-2.5 px-3.5 capitalize font-medium text-stone-600">
-                        {item.category}
+                      <td className="py-2.5 px-3.5 font-medium text-stone-600">
+                        <span className="px-2 py-0.5 rounded-md bg-rose-50 border border-rose-100 text-[11px] text-rose-800 font-semibold">
+                          {getCategoryDisplayLabel(item.category)}
+                        </span>
                       </td>
 
                       <td className="py-2.5 px-3.5 font-mono text-stone-600">
@@ -1370,7 +1561,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="text"
                     value={taglineInput}
                     onChange={(e) => setTaglineInput(e.target.value)}
-                    placeholder="Dimsum Rumahan Fresh Dibuat dari Hati"
+                    placeholder={`${storeSettings.storeName || 'Ngdimsum'} Fresh Dibuat dari Hati`}
                     className="w-full px-2.5 py-1.5 text-xs border border-rose-200 rounded-lg bg-white focus:outline-none focus:border-rose-400"
                   />
                 </div>
@@ -1462,7 +1653,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       rows={2}
                       value={promoDescription}
                       onChange={(e) => setPromoDescription(e.target.value)}
-                      placeholder="Hangat baru dikukus dari dapur rumah..."
+                      placeholder={`Hangat baru dikukus dari ${storeSettings.storeName || 'Ngdimsum'}...`}
                       className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white focus:outline-none focus:border-rose-400"
                     />
                   </div>
@@ -1478,10 +1669,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white focus:outline-none focus:border-rose-400"
                       >
                         <option value="all">Semua Menu</option>
-                        <option value="spesial">Spesial Mentai</option>
-                        <option value="kukus">Dimsum Kukus</option>
-                        <option value="goreng">Dimsum Goreng</option>
-                        <option value="minuman">Minuman</option>
+                        {activeCategories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -1912,220 +2104,371 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* MODAL TAMBAH MENU DIMSUM BARU (FOTO GOOGLE DRIVE)       */}
       {/* ======================================================== */}
       {showAddMenuModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-rose-100 overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-3.5 bg-rose-500 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <UtensilsCrossed className="w-4 h-4" />
-                <h3 className="font-serif-brand text-base font-bold">
+        <div className="fixed inset-0 z-[70] !m-0 flex items-center justify-center p-3 sm:p-4 bg-stone-950/70 backdrop-blur-xs">
+          <div className="relative w-full max-w-md max-h-[90dvh] sm:max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-rose-100 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-4 sm:px-5 py-3 bg-rose-500 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <UtensilsCrossed className="w-4 h-4 shrink-0" />
+                <h3 className="font-serif-brand text-sm sm:text-base font-bold truncate">
                   {editingMenuId ? 'Edit Menu Dimsum (Sinkron ke Sheet)' : 'Tambah Menu Dimsum Baru'}
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setShowAddMenuModal(false)}
-                className="p-1 text-rose-200 hover:text-white"
+                className="p-1.5 text-rose-100 hover:text-white rounded-lg hover:bg-rose-600/50 shrink-0"
+                aria-label="Tutup modal"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateMenuItem} className="p-5 space-y-3.5 text-xs">
-              {/* Photo Upload to Google Drive */}
-              <div className="space-y-1.5">
-                <label className="block font-semibold text-stone-700">
-                  Foto Produk Dimsum (Langsung Tersimpan ke Google Drive):
-                </label>
+            <form
+              onSubmit={handleCreateMenuItem}
+              className="flex flex-col flex-1 min-h-0 overflow-hidden text-xs"
+            >
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 overscroll-contain">
+                {/* Photo Upload to Google Drive */}
+                <div className="space-y-1.5">
+                  <label className="block font-semibold text-stone-700">
+                    Foto Produk Dimsum (Langsung Tersimpan ke Google Drive):
+                  </label>
 
-                <div className="flex items-center gap-3">
-                  <img
-                    src={newMenuImage}
-                    alt="Preview"
-                    referrerPolicy="no-referrer"
-                    className="w-16 h-16 rounded-lg object-cover border border-rose-200 bg-rose-50 shrink-0"
-                  />
-
-                  <div className="flex-1 space-y-1">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      accept="image/*"
-                      onChange={handlePhotoFileChange}
-                      className="hidden"
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={newMenuImage}
+                      alt="Preview"
+                      referrerPolicy="no-referrer"
+                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg object-cover border border-rose-200 bg-rose-50 shrink-0"
                     />
-                    <button
-                      type="button"
-                      disabled={isUploadingPhoto}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white rounded-lg font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{isUploadingPhoto ? 'Mengunggah ke Drive...' : 'Pilih Foto dari Galeri / Kamera'}</span>
-                    </button>
-                    <span className="text-[10px] text-stone-400 block">
-                      {uploadStatusMsg || 'Foto akan otomatis diarsipkan ke folder Google Drive'}
-                    </span>
+
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept="image/*"
+                        onChange={handlePhotoFileChange}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        disabled={isUploadingPhoto}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white rounded-lg font-semibold flex items-center gap-1.5 transition-colors shadow-2xs text-[11px] sm:text-xs"
+                      >
+                        <Upload className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">
+                          {isUploadingPhoto ? 'Mengunggah ke Drive...' : 'Pilih Foto dari Galeri / Kamera'}
+                        </span>
+                      </button>
+                      <span className="text-[10px] text-stone-400 block leading-snug">
+                        {uploadStatusMsg || 'Foto akan otomatis diarsipkan ke folder Google Drive'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Direct Google Drive URL Input */}
+                  <div className="pt-1">
+                    <input
+                      type="text"
+                      value={newMenuImage}
+                      onChange={(e) => setNewMenuImage(resolveDriveImageUrl(e.target.value))}
+                      placeholder="Atau tempel link gambar Google Drive (https://drive.google.com/file/d/...)"
+                      className="w-full px-2.5 py-1.5 text-[11px] border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400 font-mono"
+                    />
+                  </div>
+
+                  {/* Preset default photos quick choice */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-stone-400">Atau pilih contoh:</span>
+                    {[
+                      { label: 'Siomay/Hakau', url: '/images/dimsum_siomay_hakau_platter_1792773517046.jpg' },
+                      { label: 'Goreng Crispy', url: '/images/dimsum_fried_crispy_platter_1792773517430.jpg' },
+                      { label: 'Mentai Bakar', url: '/images/dimsum_mentai_special_1792773517652.jpg' },
+                    ].map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setNewMenuImage(preset.url)}
+                        className="px-2 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {/* Direct Google Drive URL Input */}
-                <div className="pt-1">
-                  <input
-                    type="text"
-                    value={newMenuImage}
-                    onChange={(e) => setNewMenuImage(resolveDriveImageUrl(e.target.value))}
-                    placeholder="Atau tempel link gambar Google Drive (https://drive.google.com/file/d/...)"
-                    className="w-full px-2.5 py-1.5 text-[11px] border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400 font-mono"
-                  />
-                </div>
+                {/* Name & Category */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block font-semibold text-stone-700 mb-1">
+                      Nama Menu Dimsum *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newMenuName}
+                      onChange={(e) => setNewMenuName(e.target.value)}
+                      placeholder="Contoh: Siomay Kepiting Keju"
+                      className="w-full px-3 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
+                    />
+                  </div>
 
-                {/* Preset default photos quick choice */}
-                <div className="flex items-center gap-1.5 pt-1">
-                  <span className="text-[10px] text-stone-400">Atau pilih contoh:</span>
-                  {[
-                    { label: 'Siomay/Hakau', url: '/images/dimsum_siomay_hakau_platter_1792773517046.jpg' },
-                    { label: 'Goreng Crispy', url: '/images/dimsum_fried_crispy_platter_1792773517430.jpg' },
-                    { label: 'Mentai Bakar', url: '/images/dimsum_mentai_special_1792773517652.jpg' },
-                  ].map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setNewMenuImage(preset.url)}
-                      className="px-2 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200"
+                  <div>
+                    <label className="block font-semibold text-stone-700 mb-1">
+                      Kategori Menu
+                    </label>
+                    <select
+                      value={newMenuCategory}
+                      onChange={(e) => {
+                        const nextCat = e.target.value;
+                        setNewMenuCategory(nextCat);
+                        if (
+                          !editingMenuId &&
+                          (nextCat.toLowerCase().includes('minum') ||
+                            nextCat.toLowerCase().includes('teh'))
+                        ) {
+                          setNewMenuSambalOptions([]);
+                        } else if (
+                          !editingMenuId &&
+                          newMenuSambalOptions.length === 0
+                        ) {
+                          setNewMenuSambalOptions([
+                            'Chili Oil',
+                            'Sambal Merah / Bangkok',
+                            'Tanpa Sambal',
+                          ]);
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400 bg-white"
                     >
-                      {preset.label}
-                    </button>
-                  ))}
+                      {activeCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
 
-              {/* Name & Category */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Price, Pieces, Time */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block font-semibold text-stone-700 mb-1">
+                      Harga (Rp) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      step={1000}
+                      value={newMenuPrice}
+                      onChange={(e) => setNewMenuPrice(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400 font-mono font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-stone-700 mb-1">
+                      Isi / Porsi
+                    </label>
+                    <input
+                      type="text"
+                      value={newMenuPieces}
+                      onChange={(e) => setNewMenuPieces(e.target.value)}
+                      placeholder="4 pcs"
+                      className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-stone-700 mb-1">
+                      Waktu Masak
+                    </label>
+                    <input
+                      type="number"
+                      value={newMenuPrepTime}
+                      onChange={(e) => setNewMenuPrepTime(Number(e.target.value))}
+                      placeholder="12 mnt"
+                      className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Description */}
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Nama Menu Dimsum *
+                    Deskripsi Menu (Bahan &amp; Cita Rasa):
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={newMenuName}
-                    onChange={(e) => setNewMenuName(e.target.value)}
-                    placeholder="Contoh: Siomay Kepiting Keju"
+                  <textarea
+                    rows={2}
+                    value={newMenuDesc}
+                    onChange={(e) => setNewMenuDesc(e.target.value)}
+                    placeholder="Isian ayam udang segar dengan balutan keju mozzarella..."
                     className="w-full px-3 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
                   />
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    Kategori Menu
+                {/* Pilihan Sambal Khusus Menu Ini (Setiap Menu Bisa Berbeda) */}
+                <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="font-bold text-stone-800 flex items-center gap-1">
+                      <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <span>Pilihan Sambal untuk Menu Ini ({newMenuSambalOptions.length})</span>
+                    </label>
+                    {newMenuSambalOptions.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setNewMenuSambalOptions([])}
+                        className="text-[10px] font-semibold text-rose-600 hover:underline shrink-0"
+                      >
+                        Kosongkan (Tanpa Sambal)
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewMenuSambalOptions([
+                            'Chili Oil',
+                            'Sambal Merah / Bangkok',
+                            'Tanpa Sambal',
+                          ])
+                        }
+                        className="text-[10px] font-semibold text-emerald-700 hover:underline shrink-0"
+                      >
+                        + Isi Sambal Standar
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-[10px] text-stone-500 leading-snug">
+                    Tambahkan pilihan sambal khusus untuk menu ini agar setiap menu bisa memiliki varian sambal yang berbeda.
+                  </p>
+
+                  {/* Daftar Sambal yang Aktif di Menu Ini */}
+                  {newMenuSambalOptions.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {newMenuSambalOptions.map((sb, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-amber-300 text-[11px] font-semibold text-amber-950 shadow-2xs"
+                        >
+                          <span>🌶️ {sb}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSambalFromMenuForm(sb)}
+                            className="text-stone-400 hover:text-rose-600 p-0.5 rounded-full"
+                            title={`Hapus ${sb} dari menu ini`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-stone-500 bg-white/80 px-2.5 py-1.5 rounded-lg border border-amber-200/80">
+                      Menu ini tidak menampilkan pilihan sambal (cocok untuk minuman atau menu tanpa sambal).
+                    </div>
+                  )}
+
+                  {/* Input Tambah Sambal Baru untuk Menu Ini */}
+                  <div className="flex gap-1.5 pt-0.5">
+                    <input
+                      type="text"
+                      value={newMenuSambalInput}
+                      onChange={(e) => setNewMenuSambalInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddSambalToMenuForm();
+                        }
+                      }}
+                      placeholder="Ketik pilihan sambal (misal: Chili Oil / Saus Keju)"
+                      className="flex-1 min-w-0 px-2.5 py-1.5 text-xs bg-white border border-amber-300 rounded-lg focus:outline-none focus:border-rose-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddSambalToMenuForm}
+                      className="px-2.5 py-1.5 bg-stone-900 hover:bg-stone-800 text-white font-bold text-[11px] rounded-lg flex items-center gap-1 shrink-0 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Tambah</span>
+                    </button>
+                  </div>
+
+                  {/* Tombol Cepat Pilih Contoh Sambal */}
+                  <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                    <span className="text-[10px] text-stone-500 mr-0.5">Pilih cepat:</span>
+                    {[
+                      'Chili Oil',
+                      'Sambal Merah / Bangkok',
+                      'Mayonaise',
+                      'Saus Mentai',
+                      'Saus Keju',
+                      'Sambal Bawang',
+                      'Campur (Chili Oil + Sambal)',
+                      'Pisah Sambal',
+                      'Tanpa Sambal',
+                    ]
+                      .filter(
+                        (preset) =>
+                          !newMenuSambalOptions.some(
+                            (s) => s.toLowerCase() === preset.toLowerCase()
+                          )
+                      )
+                      .map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() =>
+                            setNewMenuSambalOptions((prev) => [...prev, preset])
+                          }
+                          className="px-1.5 py-0.5 rounded text-[10px] bg-white hover:bg-amber-100 text-stone-700 border border-amber-200 transition-colors"
+                        >
+                          + {preset}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Badges / Checkboxes */}
+                <div className="flex flex-wrap items-center gap-4 pt-1">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={newMenuIsPopular}
+                      onChange={(e) => setNewMenuIsPopular(e.target.checked)}
+                      className="text-rose-500 rounded border-stone-300"
+                    />
+                    <span>Menu Favorit</span>
                   </label>
-                  <select
-                    value={newMenuCategory}
-                    onChange={(e) => setNewMenuCategory(e.target.value as any)}
-                    className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400 bg-white"
-                  >
-                    <option value="kukus">Dimsum Kukus</option>
-                    <option value="goreng">Dimsum Goreng</option>
-                    <option value="spesial">Spesial &amp; Mentai</option>
-                    <option value="minuman">Minuman &amp; Teh</option>
-                  </select>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={newMenuIsChef}
+                      onChange={(e) => setNewMenuIsChef(e.target.checked)}
+                      className="text-rose-500 rounded border-stone-300"
+                    />
+                    <span>Rekomendasi</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={newMenuIsSpicy}
+                      onChange={(e) => setNewMenuIsSpicy(e.target.checked)}
+                      className="text-rose-500 rounded border-stone-300"
+                    />
+                    <span>Pedas</span>
+                  </label>
                 </div>
               </div>
 
-              {/* Price, Pieces, Time */}
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    Harga (Rp) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    step={1000}
-                    value={newMenuPrice}
-                    onChange={(e) => setNewMenuPrice(Number(e.target.value))}
-                    className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400 font-mono font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    Isi / Porsi
-                  </label>
-                  <input
-                    type="text"
-                    value={newMenuPieces}
-                    onChange={(e) => setNewMenuPieces(e.target.value)}
-                    placeholder="4 pcs"
-                    className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    Waktu Masak
-                  </label>
-                  <input
-                    type="number"
-                    value={newMenuPrepTime}
-                    onChange={(e) => setNewMenuPrepTime(Number(e.target.value))}
-                    placeholder="12 mnt"
-                    className="w-full px-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
-                  />
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block font-semibold text-stone-700 mb-1">
-                  Deskripsi Menu (Bahan &amp; Cita Rasa):
-                </label>
-                <textarea
-                  rows={2}
-                  value={newMenuDesc}
-                  onChange={(e) => setNewMenuDesc(e.target.value)}
-                  placeholder="Isian ayam udang segar dengan balutan keju mozzarella..."
-                  className="w-full px-3 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-rose-400"
-                />
-              </div>
-
-              {/* Badges / Checkboxes */}
-              <div className="flex items-center gap-4 pt-1">
-                <label className="flex items-center gap-1.5 cursor-pointer text-stone-700">
-                  <input
-                    type="checkbox"
-                    checked={newMenuIsPopular}
-                    onChange={(e) => setNewMenuIsPopular(e.target.checked)}
-                    className="text-rose-500 rounded border-stone-300"
-                  />
-                  <span>Menu Favorit</span>
-                </label>
-
-                <label className="flex items-center gap-1.5 cursor-pointer text-stone-700">
-                  <input
-                    type="checkbox"
-                    checked={newMenuIsChef}
-                    onChange={(e) => setNewMenuIsChef(e.target.checked)}
-                    className="text-rose-500 rounded border-stone-300"
-                  />
-                  <span>Rekomendasi</span>
-                </label>
-
-                <label className="flex items-center gap-1.5 cursor-pointer text-stone-700">
-                  <input
-                    type="checkbox"
-                    checked={newMenuIsSpicy}
-                    onChange={(e) => setNewMenuIsSpicy(e.target.checked)}
-                    className="text-rose-500 rounded border-stone-300"
-                  />
-                  <span>Pedas</span>
-                </label>
-              </div>
-
-              <div className="pt-2 flex gap-2">
+              <div className="px-4 sm:px-5 py-3 border-t border-rose-100 bg-white flex gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowAddMenuModal(false)}
-                  className="flex-1 py-2 text-stone-500 hover:text-stone-800"
+                  className="flex-1 py-2 text-stone-600 hover:text-stone-900 font-semibold rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors"
                 >
                   Batal
                 </button>
@@ -2143,7 +2486,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Change PIN Modal */}
       {showPinModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[70] !m-0 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-xs">
           <div className="bg-white rounded-xl p-5 max-w-xs w-full shadow-2xl border border-rose-100">
             <h3 className="font-bold text-sm text-stone-900 mb-2">Ubah PIN Admin</h3>
             <form onSubmit={handleChangePin} className="space-y-3 text-xs">
@@ -2179,7 +2522,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Mobile Bottom Navigation Bar Khusus Dashboard Admin (Statistik, Kelola Menu, Pengaturan Dapur) */}
       <nav
         aria-label="Navigasi Dashboard Admin HP"
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-rose-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] print:hidden"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 !m-0 bg-white/95 backdrop-blur-md border-t border-rose-100 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] print:hidden"
       >
         <div className="grid grid-cols-3 h-16 max-w-md mx-auto px-2">
           <button

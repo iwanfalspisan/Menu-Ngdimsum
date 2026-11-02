@@ -1,9 +1,14 @@
-export type DimsumCategory = 'all' | 'kukus' | 'goreng' | 'spesial' | 'minuman';
+export type DimsumCategory = string;
+
+export interface CategoryItem {
+  id: string;
+  label: string;
+}
 
 export interface MenuItem {
   id: string;
   name: string;
-  category: 'kukus' | 'goreng' | 'spesial' | 'minuman';
+  category: string;
   price: number;
   description: string;
   pieces: string;
@@ -16,6 +21,8 @@ export interface MenuItem {
   prepTimeMinutes: number;
   inStock: boolean;
   driveFileId?: string;
+  hasSambal?: boolean;
+  sambalOptions?: string[];
 }
 
 export interface MenuReview {
@@ -31,7 +38,7 @@ export interface CartItem {
   menuItem: MenuItem;
   quantity: number;
   notes?: string;
-  chiliLevel?: 'Normal' | 'Extra Pedas' | 'Pisah Sambal';
+  chiliLevel?: string;
 }
 
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
@@ -54,6 +61,9 @@ export interface OrderCustomer {
   orderType: OrderType;
   tableNumber?: string;
   deliveryAddress?: string;
+  deliveryAddressStreet?: string;
+  deliveryAddressHouse?: string;
+  deliveryAddressLandmark?: string;
   deliveryDistanceKm?: number;
   deliveryLat?: number;
   deliveryLng?: number;
@@ -142,4 +152,6 @@ export interface StoreSettings {
   promoHighlightText?: string;
   promoImageUrl?: string;
   promoCategoryTarget?: DimsumCategory;
+  categories?: CategoryItem[];
+  sambalOptions?: string[];
 }

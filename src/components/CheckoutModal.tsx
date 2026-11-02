@@ -10,7 +10,7 @@ import {
   getAdminWhatsappUrl,
 } from '../services/whatsappService';
 import { calculateDeliveryFeeFromDistance } from '../services/distanceService';
-import { DistanceCalculatorBox } from './DistanceCalculatorBox';
+import { DistanceCalculatorBox, SpecificAddressDetails } from './DistanceCalculatorBox';
 import {
   X,
   MessageCircle,
@@ -56,6 +56,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   });
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
   const [deliveryAddress, setDeliveryAddress] = useState<string>('');
+  const [addressDetails, setAddressDetails] = useState<SpecificAddressDetails>({
+    street: '',
+    house: '',
+    landmark: '',
+  });
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number | null>(null);
   const [buyerCoords, setBuyerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [customerNotes, setCustomerNotes] = useState('');
@@ -67,9 +72,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     0
   );
 
+  const useDistance = storeSettings.useDistanceDelivery !== false;
+
   const deliveryFee =
     orderType === 'delivery'
-      ? calculateDeliveryFeeFromDistance(deliveryDistanceKm, storeSettings)
+      ? useDistance
+        ? buyerCoords && deliveryDistanceKm !== null
+          ? calculateDeliveryFeeFromDistance(deliveryDistanceKm, storeSettings)
+          : 0
+        : calculateDeliveryFeeFromDistance(null, storeSettings)
       : 0;
   const totalAmount = subtotal + deliveryFee;
 
@@ -94,8 +105,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         orderType,
         deliveryAddress:
           orderType === 'delivery' ? deliveryAddress.trim() : undefined,
+        deliveryAddressStreet:
+          orderType === 'delivery' && addressDetails.street
+            ? addressDetails.street
+            : undefined,
+        deliveryAddressHouse:
+          orderType === 'delivery' && addressDetails.house
+            ? addressDetails.house
+            : undefined,
+        deliveryAddressLandmark:
+          orderType === 'delivery' && addressDetails.landmark
+            ? addressDetails.landmark
+            : undefined,
         deliveryDistanceKm:
-          orderType === 'delivery' && deliveryDistanceKm ? deliveryDistanceKm : undefined,
+          orderType === 'delivery' && buyerCoords && deliveryDistanceKm
+            ? deliveryDistanceKm
+            : undefined,
         deliveryLat:
           orderType === 'delivery' && buyerCoords ? buyerCoords.lat : undefined,
         deliveryLng:
@@ -140,6 +165,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       customerPhone,
       orderType,
       deliveryAddress,
+      addressDetails,
       deliveryDistanceKm,
       buyerCoords,
       customerNotes,
@@ -155,7 +181,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const isFormValid =
     customerName.trim().length > 0 &&
     customerPhone.trim().length > 0 &&
-    (orderType !== 'delivery' || deliveryAddress.trim().length > 0);
+    (orderType !== 'delivery' ||
+      (deliveryAddress.trim().length > 0 &&
+        (!useDistance || (buyerCoords !== null && deliveryDistanceKm !== null))));
 
   const whatsappCheckoutUrl = getAdminWhatsappUrl(
     createdOrder || draftOrder,
@@ -176,7 +204,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       if (!customerName.trim() || !customerPhone.trim()) {
         setValidationError('Mohon isi Nama Anda dan Nomor WhatsApp terlebih dahulu.');
       } else if (orderType === 'delivery' && !deliveryAddress.trim()) {
-        setValidationError('Mohon masukkan alamat lengkap pengantaran kurir.');
+        setValidationError('Mohon masukkan detail alamat pengantaran kurir.');
+      } else if (
+        orderType === 'delivery' &&
+        useDistance &&
+        (!buyerCoords || deliveryDistanceKm === null)
+      ) {
+        setValidationError(
+          'Mohon tentukan titik lokasi Anda pada peta atau tekan "Gunakan Titik GPS Saya" untuk menghitung ongkos kirim.'
+        );
       }
       return;
     }
@@ -252,7 +288,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </label>
             <div className="grid grid-cols-2 gap-2.5">
               {[
-                { id: 'takeaway', label: 'Ambil Sendiri', sub: 'Ke Rumah Dapur' },
+                { id: 'takeaway', label: 'Ambil Sendiri', sub: `Di ${storeSettings.storeName || 'Toko'}` },
                 { id: 'delivery', label: 'Kirim Kurir', sub: 'Ojol / Antar ke Rumah' },
               ].map((t) => (
                 <button
@@ -313,7 +349,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <DistanceCalculatorBox
               storeSettings={storeSettings}
               deliveryAddress={deliveryAddress}
-              onChangeAddress={(addr) => setDeliveryAddress(addr)}
+              onChangeAddress={(addr, details) => {
+                setDeliveryAddress(addr);
+                if (details) {
+                  setAddressDetails(details);
+                }
+              }}
               distanceKm={deliveryDistanceKm}
               buyerCoords={buyerCoords}
               onDistanceCalculated={(km, coords) => {
@@ -341,7 +382,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-stone-700 mb-1">
-              Catatan Tambahan untuk Dapur (Opsional)
+              Catatan Tambahan untuk {storeSettings.storeName || 'Toko'} (Opsional)
             </label>
             <input
               type="text"
@@ -362,6 +403,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <div key={i} className="flex justify-between text-[11px] text-stone-700">
                   <span className="truncate pr-2">
                     {i + 1}. {c.menuItem.name} <strong>x{c.quantity}</strong>
+                    {c.chiliLevel ? ` (${c.chiliLevel})` : ''}
                   </span>
                   <span className="font-mono shrink-0">
                     {formatCurrency(c.menuItem.price * c.quantity)}

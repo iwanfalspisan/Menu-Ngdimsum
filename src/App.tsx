@@ -9,7 +9,13 @@ import {
   StoreSettings,
   MenuReview,
 } from './types';
-import { INITIAL_MENU, DEFAULT_STORE_SETTINGS, INITIAL_REVIEWS } from './data/dimsumMenu';
+import {
+  INITIAL_MENU,
+  DEFAULT_STORE_SETTINGS,
+  INITIAL_REVIEWS,
+  DEFAULT_CATEGORIES,
+  DEFAULT_SAMBAL_OPTIONS,
+} from './data/dimsumMenu';
 import {
   loadOrdersFromStorage,
   saveOrdersToStorage,
@@ -171,6 +177,23 @@ export default function App() {
             parsed.storeAddress = manualCoord.address;
           }
         }
+        if (!Array.isArray(parsed.categories) || parsed.categories.length === 0) {
+          parsed.categories = DEFAULT_CATEGORIES;
+        }
+        if (!Array.isArray(parsed.sambalOptions) || parsed.sambalOptions.length === 0) {
+          parsed.sambalOptions = DEFAULT_SAMBAL_OPTIONS;
+        }
+        const activeBrandName = parsed.storeName || 'Ngdimsum';
+        if (typeof parsed.tagline === 'string') {
+          parsed.tagline = parsed.tagline
+            .replace(/dapur rumahan|dapur rumah/gi, activeBrandName)
+            .replace(/Dimsum Rumahan/gi, activeBrandName);
+        }
+        if (typeof parsed.promoDescription === 'string') {
+          parsed.promoDescription = parsed.promoDescription
+            .replace(/dapur rumahan|dapur rumah/gi, activeBrandName)
+            .replace(/dimsum rumahan/gi, activeBrandName);
+        }
         return parsed;
       }
     } catch (e) {
@@ -179,7 +202,7 @@ export default function App() {
     return {
       ...DEFAULT_STORE_SETTINGS,
       storeName: 'Ngdimsum',
-      tagline: 'Dimsum Rumahan Fresh Dibuat dari Hati',
+      tagline: 'Dimsum Fresh Dibuat dari Hati',
     };
   });
 
@@ -196,6 +219,11 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem('ngdimsum_store_settings_v1', JSON.stringify(storeSettings));
+      if (storeSettings.storeName) {
+        document.title = storeSettings.tagline
+          ? `${storeSettings.storeName} - ${storeSettings.tagline}`
+          : storeSettings.storeName;
+      }
       if (storeSettings.storeLogoUrl) {
         let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
         if (!link) {
@@ -382,11 +410,8 @@ export default function App() {
     syncSettingsToGoogleSheet(newSettings, googleSheetConfig);
     setToast({
       id: Date.now().toString(),
-      title: 'Pengaturan Disimpan & Disinkronkan',
-      message:
-        newSettings.useDistanceDelivery !== false
-          ? `Ongkir: Rp ${(newSettings.deliveryFeePerKm ?? 2000).toLocaleString('id-ID')}/km (Titik Toko: ${newSettings.storeLat}, ${newSettings.storeLng})`
-          : `Ongkir Flat: Rp ${newSettings.deliveryFeeFixed.toLocaleString('id-ID')}`,
+      title: 'Pengaturan disimpan',
+      message: '',
     });
   };
 
@@ -474,7 +499,7 @@ export default function App() {
     item: MenuItem,
     quantity: number,
     notes?: string,
-    chiliLevel?: 'Normal' | 'Extra Pedas' | 'Pisah Sambal'
+    chiliLevel?: string
   ) => {
     setCart((prev) => {
       const existingIdx = prev.findIndex(
@@ -494,7 +519,7 @@ export default function App() {
     setToast({
       id: Date.now().toString(),
       title: 'Masuk Keranjang',
-      message: `${quantity}x ${item.name} berhasil ditambahkan.`,
+      message: `${quantity}x ${item.name}${chiliLevel ? ` (${chiliLevel})` : ''} berhasil ditambahkan.`,
     });
   };
 
@@ -506,6 +531,16 @@ export default function App() {
     setCart((prev) => {
       const next = [...prev];
       next[index].quantity = newQty;
+      return next;
+    });
+  };
+
+  const handleUpdateCartItemSambal = (index: number, newSambal: string) => {
+    setCart((prev) => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { ...next[index], chiliLevel: newSambal };
+      }
       return next;
     });
   };
@@ -544,7 +579,7 @@ export default function App() {
         if (o.id === orderId) {
           const statusNote = {
             menunggu_pembayaran: 'Menunggu pembayaran pembeli',
-            diproses_dapur: 'Dapur rumah mulai mengukus / menggoreng',
+            diproses_dapur: `${storeSettings.storeName || 'Ngdimsum'} mulai mengukus / menggoreng`,
             siap_saji: 'Dimsum hangat matang, siap diambil / diantar',
             dalam_pengiriman: 'Kurir sedang mengantar pesanan',
             selesai: 'Pesanan telah selesai',
@@ -596,7 +631,7 @@ export default function App() {
       id: `TEST-${Date.now().toString().slice(-4)}`,
       createdAt: new Date().toISOString(),
       customer: {
-        name: 'Tester Dimsum Rumahan',
+        name: `Tester ${storeSettings.storeName || 'Ngdimsum'}`,
         phone: '081299998888',
         orderType: 'takeaway',
         notes: 'Uji koneksi 2 arah Google Sheet & Drive',
@@ -739,6 +774,7 @@ export default function App() {
                   totalFiltered={filteredMenu.length}
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
+                  customCategories={storeSettings.categories}
                 />
               </div>
 
@@ -792,6 +828,9 @@ export default function App() {
                       reviews={reviews.filter((r) => r.menuItemId === item.id)}
                       onAddReview={handleAddReview}
                       onAddToCart={handleAddToCart}
+                      customCategories={storeSettings.categories}
+                      sambalOptions={storeSettings.sambalOptions}
+                      storeName={storeSettings.storeName}
                     />
                   ))}
                 </div>
@@ -951,6 +990,7 @@ export default function App() {
         onClose={() => setIsCartOpen(false)}
         items={cart}
         onUpdateQuantity={handleUpdateCartQuantity}
+        onUpdateItemSambal={handleUpdateCartItemSambal}
         onRemoveItem={handleRemoveCartItem}
         onProceedToCheckout={() => {
           setIsCartOpen(false);
@@ -1008,13 +1048,13 @@ export default function App() {
                 </span>
               </div>
               <p className="text-rose-200/80 leading-relaxed text-[11px]">
-                Pesan dimsum rumahan secara online tanpa perlu login. Pilih menu, masukkan ke keranjang, dan checkout langsung melalui chat WhatsApp.
+                Pesan menu {storeSettings.storeName} secara online tanpa perlu login. Pilih menu, masukkan ke keranjang, dan checkout langsung melalui chat WhatsApp.
               </p>
             </div>
 
             <div className="space-y-1 text-rose-200/80 text-[11px]">
               <div className="font-bold text-white uppercase tracking-wider text-[11px] mb-1">
-                Lokasi &amp; Kontak Dapur
+                Lokasi &amp; Kontak {storeSettings.storeName}
               </div>
               <div className="flex items-start gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />

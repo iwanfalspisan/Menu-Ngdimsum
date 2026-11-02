@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { CartItem, Order, OrderType, StoreSettings } from '../types';
+import { DEFAULT_SAMBAL_OPTIONS } from '../data/dimsumMenu';
 import {
   formatCurrency,
   getAdminWhatsappUrl,
 } from '../services/whatsappService';
 import { calculateDeliveryFeeFromDistance } from '../services/distanceService';
-import { DistanceCalculatorBox } from './DistanceCalculatorBox';
+import { DistanceCalculatorBox, SpecificAddressDetails } from './DistanceCalculatorBox';
 import {
   X,
   Trash2,
@@ -13,6 +14,7 @@ import {
   Utensils,
   MessageCircle,
   AlertCircle,
+  Flame,
 } from 'lucide-react';
 
 interface CartDrawerProps {
@@ -20,6 +22,7 @@ interface CartDrawerProps {
   onClose: () => void;
   items: CartItem[];
   onUpdateQuantity: (index: number, newQty: number) => void;
+  onUpdateItemSambal?: (index: number, newSambal: string) => void;
   onRemoveItem: (index: number) => void;
   onProceedToCheckout: () => void;
   storeSettings?: StoreSettings;
@@ -31,11 +34,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClose,
   items,
   onUpdateQuantity,
+  onUpdateItemSambal,
   onRemoveItem,
   storeSettings,
   onOrderCreated,
 }) => {
   const isSubmittingRef = useRef(false);
+  const availableSambals =
+    storeSettings?.sambalOptions && storeSettings.sambalOptions.length > 0
+      ? storeSettings.sambalOptions
+      : DEFAULT_SAMBAL_OPTIONS;
 
   useEffect(() => {
     if (isOpen) {
@@ -59,6 +67,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   });
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
   const [deliveryAddress, setDeliveryAddress] = useState<string>('');
+  const [addressDetails, setAddressDetails] = useState<SpecificAddressDetails>({
+    street: '',
+    house: '',
+    landmark: '',
+  });
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number | null>(null);
   const [buyerCoords, setBuyerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [customerNotes, setCustomerNotes] = useState('');
@@ -69,9 +82,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     0
   );
 
+  const useDistance = storeSettings?.useDistanceDelivery !== false;
+
   const deliveryFee =
     orderType === 'delivery'
-      ? calculateDeliveryFeeFromDistance(deliveryDistanceKm, storeSettings)
+      ? useDistance
+        ? buyerCoords && deliveryDistanceKm !== null
+          ? calculateDeliveryFeeFromDistance(deliveryDistanceKm, storeSettings)
+          : 0
+        : calculateDeliveryFeeFromDistance(null, storeSettings)
       : 0;
   const totalAmount = subtotal + deliveryFee;
 
@@ -97,8 +116,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         orderType,
         deliveryAddress:
           orderType === 'delivery' ? deliveryAddress.trim() : undefined,
+        deliveryAddressStreet:
+          orderType === 'delivery' && addressDetails.street
+            ? addressDetails.street
+            : undefined,
+        deliveryAddressHouse:
+          orderType === 'delivery' && addressDetails.house
+            ? addressDetails.house
+            : undefined,
+        deliveryAddressLandmark:
+          orderType === 'delivery' && addressDetails.landmark
+            ? addressDetails.landmark
+            : undefined,
         deliveryDistanceKm:
-          orderType === 'delivery' && deliveryDistanceKm ? deliveryDistanceKm : undefined,
+          orderType === 'delivery' && buyerCoords && deliveryDistanceKm
+            ? deliveryDistanceKm
+            : undefined,
         deliveryLat:
           orderType === 'delivery' && buyerCoords ? buyerCoords.lat : undefined,
         deliveryLng:
@@ -143,6 +176,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       customerPhone,
       orderType,
       deliveryAddress,
+      addressDetails,
       deliveryDistanceKm,
       buyerCoords,
       customerNotes,
@@ -158,7 +192,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const isFormValid =
     customerName.trim().length > 0 &&
     customerPhone.trim().length > 0 &&
-    (orderType !== 'delivery' || deliveryAddress.trim().length > 0);
+    (orderType !== 'delivery' ||
+      (deliveryAddress.trim().length > 0 &&
+        (!useDistance || (buyerCoords !== null && deliveryDistanceKm !== null))));
 
   const liveWhatsappUrl = getAdminWhatsappUrl(
     draftOrder,
@@ -172,7 +208,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       if (!customerName.trim() || !customerPhone.trim()) {
         setValidationError('Mohon isi Nama Pemesan dan Nomor WhatsApp terlebih dahulu.');
       } else if (orderType === 'delivery' && !deliveryAddress.trim()) {
-        setValidationError('Mohon isi Alamat Pengantaran untuk pengiriman kurir.');
+        setValidationError('Mohon isi Detail Alamat Pengantaran terlebih dahulu.');
+      } else if (
+        orderType === 'delivery' &&
+        useDistance &&
+        (!buyerCoords || deliveryDistanceKm === null)
+      ) {
+        setValidationError(
+          'Mohon tentukan titik lokasi Anda pada peta atau tekan "Gunakan Titik GPS Saya" untuk menghitung ongkos kirim.'
+        );
       }
       return;
     }
@@ -291,13 +335,53 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                               <div className="text-[11px] text-stone-500 mt-0.5">
                                 <span>{formatCurrency(cartItem.menuItem.price)}</span>
-                                {cartItem.chiliLevel &&
-                                  cartItem.chiliLevel !== 'Normal' && (
-                                    <span className="text-rose-600 font-medium ml-1">
-                                      · {cartItem.chiliLevel}
-                                    </span>
-                                  )}
                               </div>
+
+                              {/* Pilihan Sambal Langsung di Keranjang (Sesuai Pilihan Sambal Menu Masing-Masing) */}
+                              {(() => {
+                                const isDrinkCat =
+                                  cartItem.menuItem.category.toLowerCase().includes('minum') ||
+                                  cartItem.menuItem.category.toLowerCase().includes('teh');
+                                const itemSambalList = Array.isArray(cartItem.menuItem.sambalOptions)
+                                  ? cartItem.menuItem.sambalOptions
+                                  : isDrinkCat || cartItem.menuItem.hasSambal === false
+                                  ? []
+                                  : availableSambals;
+                                const showSambalSelect =
+                                  cartItem.menuItem.hasSambal !== false &&
+                                  itemSambalList.length > 0;
+                                if (!showSambalSelect) return null;
+                                return (
+                                  <div className="mt-1 flex items-center gap-1.5">
+                                    <span className="text-[10px] font-semibold text-rose-700 flex items-center gap-0.5 shrink-0">
+                                      <Flame className="w-2.5 h-2.5 text-rose-500" />
+                                      Sambal:
+                                    </span>
+                                    {onUpdateItemSambal ? (
+                                      <select
+                                        value={
+                                          cartItem.chiliLevel &&
+                                          itemSambalList.includes(cartItem.chiliLevel)
+                                            ? cartItem.chiliLevel
+                                            : itemSambalList[0] || ''
+                                        }
+                                        onChange={(e) => onUpdateItemSambal(idx, e.target.value)}
+                                        className="flex-1 min-w-0 px-1.5 py-0.5 text-[10px] font-semibold bg-rose-50 border border-rose-200 rounded text-rose-900 focus:outline-none focus:border-rose-400"
+                                      >
+                                        {itemSambalList.map((s, sIdx) => (
+                                          <option key={sIdx} value={s}>
+                                            {s}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <span className="text-[10px] font-semibold text-rose-700">
+                                        {cartItem.chiliLevel || itemSambalList[0]}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
 
                               {cartItem.notes && (
                                 <div className="text-[10px] text-stone-500 italic mt-0.5 bg-rose-50/50 px-2 py-0.5 rounded border border-rose-100">
@@ -412,7 +496,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           <DistanceCalculatorBox
                             storeSettings={storeSettings}
                             deliveryAddress={deliveryAddress}
-                            onChangeAddress={(addr) => setDeliveryAddress(addr)}
+                            onChangeAddress={(addr, details) => {
+                              setDeliveryAddress(addr);
+                              if (details) {
+                                setAddressDetails(details);
+                              }
+                            }}
                             distanceKm={deliveryDistanceKm}
                             buyerCoords={buyerCoords}
                             onDistanceCalculated={(km, coords) => {

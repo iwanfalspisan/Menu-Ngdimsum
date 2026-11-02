@@ -1,4 +1,21 @@
-import { MenuItem, MenuReview } from '../types';
+import { MenuItem, MenuReview, CategoryItem } from '../types';
+
+export const DEFAULT_CATEGORIES: CategoryItem[] = [
+  { id: 'kukus', label: 'Dimsum Kukus' },
+  { id: 'goreng', label: 'Dimsum Goreng' },
+  { id: 'spesial', label: 'Spesial Mentai' },
+  { id: 'minuman', label: 'Minuman' },
+];
+
+export const DEFAULT_SAMBAL_OPTIONS: string[] = [
+  'Chili Oil',
+  'Sambal Merah / Bangkok',
+  'Campur (Chili Oil + Sambal)',
+  'Saus Mentai',
+  'Mayonaise',
+  'Pisah Sambal',
+  'Tanpa Sambal',
+];
 
 export const INITIAL_MENU: MenuItem[] = [
   {
@@ -208,12 +225,12 @@ export const INITIAL_MENU: MenuItem[] = [
 
 export const DEFAULT_STORE_SETTINGS = {
   storeName: 'Ngdimsum',
-  tagline: 'Dimsum Rumahan Fresh Dibuat dari Hati',
+  tagline: 'Dimsum Fresh Dibuat dari Hati',
   adminWhatsapp: '6281234567890',
   storeAddress: '',
   openingHours: '09:00 - 21:00 WIB',
   isStoreOpen: true,
-  qrisMerchantName: 'NGDIMSUM RUMAHAN',
+  qrisMerchantName: 'NGDIMSUM',
   customQrisImageUrl: '',
   packagingFeeDineIn: 0,
   packagingFeeTakeaway: 0,
@@ -228,10 +245,12 @@ export const DEFAULT_STORE_SETTINGS = {
   promoEnabled: true,
   promoBadge: 'PROMO SPESIAL HARI INI',
   promoTitle: 'Dimsum Mentai Bakar Tobiko & Siomay Ayam Udang',
-  promoDescription: 'Hangat baru dikukus dari dapur rumah, gratis Chili Oil khas Ngdimsum setiap pemesanan via WhatsApp!',
+  promoDescription: 'Hangat baru dikukus dari Ngdimsum, gratis Chili Oil khas Ngdimsum setiap pemesanan via WhatsApp!',
   promoHighlightText: 'Mulai Rp 25.000',
   promoImageUrl: '/images/dimsum_mentai_special_1792773517652.jpg',
-  promoCategoryTarget: 'spesial' as const,
+  promoCategoryTarget: 'spesial',
+  categories: DEFAULT_CATEGORIES,
+  sambalOptions: DEFAULT_SAMBAL_OPTIONS,
 };
 
 export const INITIAL_REVIEWS: MenuReview[] = [

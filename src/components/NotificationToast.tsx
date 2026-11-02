@@ -38,8 +38,12 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
         </div>
 
         <div className="text-xs">
-          <span className="font-bold text-white mr-1.5">{toast.title}:</span>
-          <span className="text-stone-300 text-[11px]">{toast.message}</span>
+          <span className={`font-bold text-white ${toast.message ? 'mr-1.5' : ''}`}>
+            {toast.title}{toast.message ? ':' : ''}
+          </span>
+          {toast.message && (
+            <span className="text-stone-300 text-[11px]">{toast.message}</span>
+          )}
         </div>
 
         <button

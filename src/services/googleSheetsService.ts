@@ -1220,14 +1220,46 @@ export const fetchTwoWaySyncFromSheet = async (
     const data = await res.json();
     if (!data || data.status !== 'success') return { success: false };
 
+    let localMenuSambalsMap: Record<string, string[]> = {};
+    try {
+      const savedMap = localStorage.getItem('ngdimsum_menu_sambals_map_v1');
+      if (savedMap) localMenuSambalsMap = JSON.parse(savedMap);
+    } catch (e) {}
+
     const parsedMenu: MenuItem[] | undefined = Array.isArray(data.menu)
-      ? data.menu.map((m: any) => ({
-          ...m,
-          image: resolveDriveImageUrl(m.image),
-          price: Number(m.price) || 0,
-          prepTimeMinutes: Number(m.prepTimeMinutes) || 12,
-          inStock: m.inStock !== false,
-        }))
+      ? data.menu.map((m: any) => {
+          let parsedSambalOptions: string[] | undefined = Array.isArray(m.sambalOptions)
+            ? m.sambalOptions
+            : undefined;
+
+          const rawDriveCol = String(m.driveFileId || '').trim();
+          if (!parsedSambalOptions && rawDriveCol.startsWith('SAMBAL_JSON:')) {
+            try {
+              const arr = JSON.parse(rawDriveCol.slice('SAMBAL_JSON:'.length));
+              if (Array.isArray(arr)) {
+                parsedSambalOptions = arr.map((s) => String(s));
+              }
+            } catch (e) {}
+          }
+
+          if (!parsedSambalOptions && Array.isArray(localMenuSambalsMap[m.id])) {
+            parsedSambalOptions = localMenuSambalsMap[m.id];
+          }
+
+          return {
+            ...m,
+            image: resolveDriveImageUrl(m.image),
+            price: Number(m.price) || 0,
+            prepTimeMinutes: Number(m.prepTimeMinutes) || 12,
+            inStock: m.inStock !== false,
+            ...(parsedSambalOptions !== undefined
+              ? {
+                  sambalOptions: parsedSambalOptions,
+                  hasSambal: parsedSambalOptions.length > 0,
+                }
+              : {}),
+          };
+        })
       : undefined;
 
     const resetAt = getStatsResetTimestamp();
@@ -1386,6 +1418,34 @@ export const fetchTwoWaySyncFromSheet = async (
       if (data.settings.promoCategoryTarget !== undefined) {
         parsedSettings.promoCategoryTarget = data.settings.promoCategoryTarget as any;
       }
+      if (data.settings.categories !== undefined && data.settings.categories !== '') {
+        try {
+          const rawCats = data.settings.categories;
+          const parsedCats =
+            typeof rawCats === 'string' ? JSON.parse(rawCats) : rawCats;
+          if (
+            Array.isArray(parsedCats) &&
+            parsedCats.length > 0 &&
+            parsedCats.every((c: any) => c && typeof c.id === 'string' && typeof c.label === 'string')
+          ) {
+            parsedSettings.categories = parsedCats;
+          }
+        } catch (e) {}
+      }
+      if (data.settings.sambalOptions !== undefined && data.settings.sambalOptions !== '') {
+        try {
+          const rawSambals = data.settings.sambalOptions;
+          const parsedSambals =
+            typeof rawSambals === 'string' ? JSON.parse(rawSambals) : rawSambals;
+          if (
+            Array.isArray(parsedSambals) &&
+            parsedSambals.length > 0 &&
+            parsedSambals.every((s: any) => typeof s === 'string')
+          ) {
+            parsedSettings.sambalOptions = parsedSambals;
+          }
+        } catch (e) {}
+      }
     }
 
     return {
@@ -1409,14 +1469,28 @@ export const upsertMenuItemToSheet = async (
   config: GoogleSheetConfig
 ): Promise<boolean> => {
   markLocalMutation();
+  try {
+    if (Array.isArray(item.sambalOptions)) {
+      const savedMapRaw = localStorage.getItem('ngdimsum_menu_sambals_map_v1');
+      const map: Record<string, string[]> = savedMapRaw ? JSON.parse(savedMapRaw) : {};
+      map[item.id] = item.sambalOptions;
+      localStorage.setItem('ngdimsum_menu_sambals_map_v1', JSON.stringify(map));
+    }
+  } catch (e) {}
   if (!isRealAppsScriptUrl(config.webAppUrl)) return false;
   try {
+    const payloadItem: MenuItem = {
+      ...item,
+      driveFileId: Array.isArray(item.sambalOptions)
+        ? `SAMBAL_JSON:${JSON.stringify(item.sambalOptions)}`
+        : item.driveFileId,
+    };
     await fetch(config.webAppUrl.trim(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action: 'upsert_menu_item',
-        item,
+        item: payloadItem,
         spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
       }),
     });
@@ -1461,12 +1535,18 @@ export const syncMenuToGoogleSheet = async (
   markLocalMutation();
   if (!isRealAppsScriptUrl(config.webAppUrl)) return false;
   try {
+    const enrichedItems = menuItems.map((it) => ({
+      ...it,
+      driveFileId: Array.isArray(it.sambalOptions)
+        ? `SAMBAL_JSON:${JSON.stringify(it.sambalOptions)}`
+        : it.driveFileId,
+    }));
     await fetch(config.webAppUrl.trim(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action: 'sync_menu',
-        menuItems,
+        menuItems: enrichedItems,
         spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
       }),
     });
@@ -1486,12 +1566,19 @@ export const syncSettingsToGoogleSheet = async (
   markLocalMutation();
   if (!isRealAppsScriptUrl(config.webAppUrl)) return false;
   try {
+    const serializedSettings = {
+      ...settings,
+      categories: settings.categories ? JSON.stringify(settings.categories) : undefined,
+      sambalOptions: settings.sambalOptions
+        ? JSON.stringify(settings.sambalOptions)
+        : undefined,
+    };
     const res = await fetch(config.webAppUrl.trim(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action: 'sync_settings',
-        settings,
+        settings: serializedSettings,
         spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl),
       }),
     });

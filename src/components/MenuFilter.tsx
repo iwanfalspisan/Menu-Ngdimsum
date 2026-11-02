@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { DimsumCategory } from '../types';
+import { DimsumCategory, CategoryItem } from '../types';
+import { DEFAULT_CATEGORIES } from '../data/dimsumMenu';
 import { Flame, Star, Sparkles, SlidersHorizontal, ArrowUpDown, Search, X } from 'lucide-react';
 
 interface MenuFilterProps {
@@ -12,6 +13,7 @@ interface MenuFilterProps {
   totalFiltered: number;
   searchQuery?: string;
   setSearchQuery?: (q: string) => void;
+  customCategories?: CategoryItem[];
 }
 
 export const MenuFilter: React.FC<MenuFilterProps> = ({
@@ -24,18 +26,21 @@ export const MenuFilter: React.FC<MenuFilterProps> = ({
   totalFiltered,
   searchQuery,
   setSearchQuery,
+  customCategories,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
 
+  const activeCategoryList =
+    customCategories && customCategories.length > 0
+      ? customCategories
+      : DEFAULT_CATEGORIES;
+
   const categories: { id: DimsumCategory; label: string }[] = [
     { id: 'all', label: 'Semua Menu' },
-    { id: 'kukus', label: 'Dimsum Kukus' },
-    { id: 'goreng', label: 'Dimsum Goreng' },
-    { id: 'spesial', label: 'Spesial Mentai' },
-    { id: 'minuman', label: 'Minuman' },
+    ...activeCategoryList,
   ];
 
   const tags = [

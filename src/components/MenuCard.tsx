@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { MenuItem, MenuReview } from '../types';
+import React, { useState, useEffect } from 'react';
+import { MenuItem, MenuReview, CategoryItem } from '../types';
+import { DEFAULT_CATEGORIES, DEFAULT_SAMBAL_OPTIONS } from '../data/dimsumMenu';
 import { Plus, Check, Clock, Utensils, Flame, Star, MessageSquarePlus, User, Send } from 'lucide-react';
 import { formatCurrency } from '../services/whatsappService';
 import { resolveDriveImageUrl } from '../services/googleSheetsService';
@@ -8,6 +9,9 @@ interface MenuCardProps {
   item: MenuItem;
   index?: number;
   reviews?: MenuReview[];
+  customCategories?: CategoryItem[];
+  sambalOptions?: string[];
+  storeName?: string;
   onAddReview?: (
     menuItemId: string,
     rating: number,
@@ -18,7 +22,7 @@ interface MenuCardProps {
     item: MenuItem,
     quantity: number,
     notes?: string,
-    chiliLevel?: 'Normal' | 'Extra Pedas' | 'Pisah Sambal'
+    chiliLevel?: string
   ) => void;
 }
 
@@ -34,17 +38,45 @@ export const MenuCard: React.FC<MenuCardProps> = ({
   item,
   index = 0,
   reviews = [],
+  customCategories,
+  sambalOptions,
+  storeName = 'Ngdimsum',
   onAddReview,
   onAddToCart,
 }) => {
+  const isDrinkCategory =
+    item.category.toLowerCase().includes('minum') ||
+    item.category.toLowerCase().includes('teh');
+
+  const availableSambals = Array.isArray(item.sambalOptions)
+    ? item.sambalOptions
+    : isDrinkCategory || item.hasSambal === false
+    ? []
+    : sambalOptions && sambalOptions.length > 0
+    ? sambalOptions
+    : DEFAULT_SAMBAL_OPTIONS;
+
+  const isDrinkItem =
+    item.hasSambal === false || availableSambals.length === 0;
+
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [quantity, setQuantity] = useState(1);
-  const [chiliLevel, setChiliLevel] = useState<'Normal' | 'Extra Pedas' | 'Pisah Sambal'>('Normal');
+  const [chiliLevel, setChiliLevel] = useState<string>(
+    isDrinkItem ? '' : availableSambals[0] || ''
+  );
   const [notes, setNotes] = useState('');
   const [addedAnimation, setAddedAnimation] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!isDrinkItem && (!chiliLevel || !availableSambals.includes(chiliLevel))) {
+      setChiliLevel(availableSambals[0] || '');
+    } else if (isDrinkItem && chiliLevel) {
+      setChiliLevel('');
+    }
+  }, [availableSambals, isDrinkItem]);
 
   // Star rating & review states
   const [hoverStar, setHoverStar] = useState<number>(0);
@@ -55,6 +87,16 @@ export const MenuCard: React.FC<MenuCardProps> = ({
 
   const resolvedImg = resolveDriveImageUrl(item.image);
 
+  const categoryLabel = (() => {
+    const list =
+      customCategories && customCategories.length > 0
+        ? customCategories
+        : DEFAULT_CATEGORIES;
+    const found = list.find((c) => c.id === item.category);
+    if (found) return found.label;
+    return item.category;
+  })();
+
   // Calculate average rating & total reviews
   const totalReviews = reviews.length;
   const averageRating =
@@ -64,14 +106,14 @@ export const MenuCard: React.FC<MenuCardProps> = ({
 
   const handleQuickAdd = () => {
     if (!item.inStock) return;
-    onAddToCart(item, 1, '', 'Normal');
+    onAddToCart(item, 1, '', isDrinkItem ? undefined : chiliLevel);
     setAddedAnimation(true);
     setTimeout(() => setAddedAnimation(false), 800);
   };
 
   const handleCustomAdd = () => {
     if (!item.inStock) return;
-    onAddToCart(item, quantity, notes, chiliLevel);
+    onAddToCart(item, quantity, notes, isDrinkItem ? undefined : chiliLevel);
     setShowOptionsModal(false);
     setAddedAnimation(true);
     setNotes('');
@@ -107,7 +149,7 @@ export const MenuCard: React.FC<MenuCardProps> = ({
     <>
       <div
         style={{ animationDelay: `${Math.min(index * 45, 360)}ms` }}
-        className={`animate-fade-up group flex flex-col bg-white border border-rose-100/90 rounded-xl overflow-hidden hover:shadow-md hover:border-rose-200 transition-all duration-300 ease-out ${
+        className={`animate-fade-up group flex flex-col min-w-0 bg-white border border-rose-100/90 rounded-xl overflow-hidden hover:shadow-md hover:border-rose-200 transition-all duration-300 ease-out ${
           item.inStock ? 'hover:-translate-y-1' : 'opacity-75'
         }`}
       >
@@ -168,28 +210,22 @@ export const MenuCard: React.FC<MenuCardProps> = ({
         </div>
 
         {/* Card Body (Compact & tidy) */}
-        <div className="p-2.5 sm:p-3 flex-1 flex flex-col justify-between">
-          <div>
+        <div className="p-2.5 sm:p-3 flex-1 flex flex-col justify-between min-w-0">
+          <div className="min-w-0">
             {/* Category & Prep Time */}
-            <div className="flex items-center gap-1 text-[10px] text-stone-400 mb-0.5">
-              <span className="uppercase tracking-wider font-semibold text-rose-600">
-                {item.category === 'kukus'
-                  ? 'Kukus'
-                  : item.category === 'goreng'
-                  ? 'Goreng'
-                  : item.category === 'spesial'
-                  ? 'Mentai'
-                  : item.category}
+            <div className="flex items-center gap-1 text-[9px] sm:text-[10px] text-stone-400 mb-0.5 min-w-0">
+              <span className="uppercase tracking-wider font-semibold text-rose-600 truncate min-w-0">
+                {categoryLabel}
               </span>
-              <span aria-hidden="true">·</span>
-              <span className="flex items-center gap-0.5">
-                <Clock className="w-2.5 h-2.5 text-stone-400" />
+              <span aria-hidden="true" className="shrink-0">·</span>
+              <span className="flex items-center gap-0.5 shrink-0">
+                <Clock className="w-2.5 h-2.5 text-stone-400 shrink-0" />
                 <span>{item.prepTimeMinutes}m</span>
               </span>
               {item.isSpicy && (
                 <>
-                  <span aria-hidden="true">·</span>
-                  <span className="text-rose-600 flex items-center gap-0.5">
+                  <span aria-hidden="true" className="hidden sm:inline shrink-0">·</span>
+                  <span className="text-rose-600 hidden sm:flex items-center gap-0.5 shrink-0">
                     <Flame className="w-2.5 h-2.5 text-rose-500" />
                     <span>Pedas</span>
                   </span>
@@ -207,14 +243,14 @@ export const MenuCard: React.FC<MenuCardProps> = ({
             </h3>
 
             {/* Star Rating & Average Rating Row directly below Menu Name */}
-            <div className="flex items-center justify-between gap-1 mb-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-0.5 mb-1.5 min-w-0">
               <div
-                className="flex items-center gap-1 group/stars cursor-pointer"
+                className="flex items-center gap-0.5 sm:gap-1 group/stars cursor-pointer min-w-0"
                 onMouseLeave={() => setHoverStar(0)}
                 onClick={(e) => handleOpenReviewWithStar(5, e)}
                 title="Klik bintang untuk memberi rating & ulasan"
               >
-                <div className="flex items-center gap-0.5">
+                <div className="flex items-center gap-px sm:gap-0.5 shrink-0">
                   {[1, 2, 3, 4, 5].map((star) => {
                     const isFilled = hoverStar
                       ? star <= hoverStar
@@ -226,10 +262,10 @@ export const MenuCard: React.FC<MenuCardProps> = ({
                         onMouseEnter={() => setHoverStar(star)}
                         onClick={(e) => handleOpenReviewWithStar(star, e)}
                         aria-label={`Beri rating ${star} bintang untuk ${item.name}`}
-                        className="p-0.5 -m-0.5 transition-transform duration-150 hover:scale-125 focus:outline-none"
+                        className="p-0 sm:p-0.5 sm:-m-0.5 transition-transform duration-150 hover:scale-125 focus:outline-none"
                       >
                         <Star
-                          className={`w-3 h-3 transition-colors duration-150 ${
+                          className={`w-2.5 h-2.5 sm:w-3 sm:h-3 transition-colors duration-150 ${
                             isFilled
                               ? 'fill-amber-400 text-amber-400'
                               : 'fill-stone-100 text-stone-300'
@@ -239,10 +275,10 @@ export const MenuCard: React.FC<MenuCardProps> = ({
                     );
                   })}
                 </div>
-                <span className="text-[11px] font-bold text-stone-800 font-mono tabular-nums ml-0.5">
+                <span className="text-[10px] sm:text-[11px] font-bold text-stone-800 font-mono tabular-nums ml-0.5">
                   {averageRating.toFixed(1)}
                 </span>
-                <span className="text-[10px] text-stone-400">
+                <span className="text-[9px] sm:text-[10px] text-stone-400">
                   ({totalReviews})
                 </span>
               </div>
@@ -250,22 +286,44 @@ export const MenuCard: React.FC<MenuCardProps> = ({
               <button
                 type="button"
                 onClick={(e) => handleOpenReviewWithStar(5, e)}
-                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-1.5 py-0.5 rounded transition-colors shrink-0"
+                className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-1 sm:px-1.5 py-0.5 rounded transition-colors shrink-0"
               >
-                <MessageSquarePlus className="w-2.5 h-2.5" />
+                <MessageSquarePlus className="w-2.5 h-2.5 shrink-0" />
                 <span>Ulas</span>
               </button>
             </div>
 
-            <p className="text-[11px] text-stone-500 line-clamp-1 sm:line-clamp-2 leading-relaxed mb-2">
+            <p className="text-[10px] sm:text-[11px] text-stone-500 line-clamp-1 sm:line-clamp-2 leading-relaxed mb-2">
               {item.description}
             </p>
+
+            {/* Pilihan Sambal Langsung di Kartu Menu */}
+            {!isDrinkItem && item.inStock && (
+              <div className="mb-2 min-w-0">
+                <label className="block text-[9px] sm:text-[10px] font-semibold text-rose-800 mb-0.5 flex items-center gap-1">
+                  <Flame className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+                  <span className="truncate">Pilihan Sambal:</span>
+                </label>
+                <select
+                  value={chiliLevel}
+                  onChange={(e) => setChiliLevel(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full min-w-0 px-1.5 sm:px-2 py-1 text-[10px] sm:text-[11px] font-medium bg-rose-50/60 border border-rose-200 rounded-lg text-stone-800 focus:outline-none focus:border-rose-400 cursor-pointer truncate"
+                >
+                  {availableSambals.map((sambal, idx) => (
+                    <option key={idx} value={sambal}>
+                      {sambal}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Price & Action Row */}
-          <div className="flex items-center justify-between pt-2 border-t border-rose-50 gap-1">
-            <div>
-              <span className="text-xs sm:text-sm font-bold text-rose-950 font-mono tabular-nums tracking-tight">
+          <div className="flex items-center justify-between pt-2 border-t border-rose-50 gap-1 min-w-0">
+            <div className="min-w-0">
+              <span className="text-[11px] sm:text-sm font-bold text-rose-950 font-mono tabular-nums tracking-tight whitespace-nowrap">
                 {formatCurrency(item.price)}
               </span>
             </div>
@@ -286,7 +344,7 @@ export const MenuCard: React.FC<MenuCardProps> = ({
                 disabled={!item.inStock}
                 onClick={handleQuickAdd}
                 aria-label={`Tambah ${item.name} ke keranjang`}
-                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg transition-all duration-200 shadow-2xs active:scale-95 whitespace-nowrap ${
+                className={`flex items-center gap-0.5 sm:gap-1 px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold rounded-lg transition-all duration-200 shadow-2xs active:scale-95 whitespace-nowrap ${
                   !item.inStock
                     ? 'bg-stone-200 text-stone-500 cursor-not-allowed'
                     : addedAnimation
@@ -298,12 +356,12 @@ export const MenuCard: React.FC<MenuCardProps> = ({
                   <span>Habis</span>
                 ) : addedAnimation ? (
                   <>
-                    <Check className="w-3 h-3" />
+                    <Check className="w-3 h-3 shrink-0" />
                     <span className="hidden sm:inline">Masuk</span>
                   </>
                 ) : (
                   <>
-                    <Plus className="w-3 h-3" />
+                    <Plus className="w-3 h-3 shrink-0" />
                     <span>Pesan</span>
                   </>
                 )}
@@ -316,15 +374,15 @@ export const MenuCard: React.FC<MenuCardProps> = ({
       {/* Modal Ulasan & Rating Bintang */}
       {showReviewModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-xs animate-fade-smooth"
+          className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-stone-950/60 backdrop-blur-xs animate-fade-smooth"
           onClick={() => setShowReviewModal(false)}
         >
           <div
-            className="bg-white rounded-2xl max-w-sm sm:max-w-md w-full overflow-hidden shadow-2xl border border-rose-100 animate-fade-up"
+            className="bg-white rounded-2xl max-w-sm sm:max-w-md w-full max-h-[90dvh] flex flex-col overflow-hidden shadow-2xl border border-rose-100 animate-fade-up"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-4 bg-gradient-to-r from-rose-50 via-white to-amber-50/50 border-b border-rose-100 flex items-center justify-between gap-3">
+            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-rose-50 via-white to-amber-50/50 border-b border-rose-100 flex items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-2.5 min-w-0">
                 <img
                   src={resolvedImg}
@@ -355,7 +413,7 @@ export const MenuCard: React.FC<MenuCardProps> = ({
               </button>
             </div>
 
-            <div className="p-4 sm:p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+            <div className="p-3.5 sm:p-5 space-y-4 flex-1 overflow-y-auto overscroll-contain">
               {/* Form Beri Rating */}
               <form onSubmit={handleSubmitReview} className="space-y-3 bg-rose-50/40 p-3.5 rounded-xl border border-rose-100">
                 <div className="text-center">
@@ -491,19 +549,19 @@ export const MenuCard: React.FC<MenuCardProps> = ({
       {/* Modal Kustomisasi Dimsum */}
       {showOptionsModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-xs animate-fade-smooth"
+          className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-stone-950/60 backdrop-blur-xs animate-fade-smooth"
           onClick={() => setShowOptionsModal(false)}
         >
           <div
-            className="bg-white rounded-2xl max-w-sm sm:max-w-md w-full overflow-hidden shadow-2xl border border-rose-100 animate-fade-up"
+            className="bg-white rounded-2xl max-w-sm sm:max-w-md w-full max-h-[90dvh] overflow-y-auto overscroll-contain shadow-2xl border border-rose-100 animate-fade-up"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative aspect-16/9 w-full bg-rose-50/50">
+            <div className="relative w-full bg-rose-50/50">
               <img
                 src={resolvedImg}
                 alt={item.name}
                 referrerPolicy="no-referrer"
-                className="w-full h-full object-cover"
+                className="w-full h-auto block object-cover"
               />
               <button
                 onClick={() => setShowOptionsModal(false)}
@@ -516,7 +574,7 @@ export const MenuCard: React.FC<MenuCardProps> = ({
             <div className="p-4 sm:p-5 space-y-3.5">
               <div>
                 <div className="text-[11px] text-rose-600 font-semibold uppercase tracking-wider mb-0.5">
-                  Dapur Rumahan · {item.pieces}
+                  {storeName} · {item.pieces}
                 </div>
                 <h3 className="text-base font-bold text-stone-900">{item.name}</h3>
                 {/* Average rating inside detail modal as well */}
@@ -546,33 +604,36 @@ export const MenuCard: React.FC<MenuCardProps> = ({
                 </div>
               </div>
 
-              {/* Pilihan Level Sambal */}
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Pilihan Sambal Chili Oil Racikan:
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(['Normal', 'Extra Pedas', 'Pisah Sambal'] as const).map((lvl) => (
-                    <button
-                      key={lvl}
-                      type="button"
-                      onClick={() => setChiliLevel(lvl)}
-                      className={`py-1.5 px-2 text-xs font-medium rounded-lg border text-center transition-all ${
-                        chiliLevel === lvl
-                          ? 'border-rose-500 bg-rose-50 text-rose-800 font-bold'
-                          : 'border-stone-200 text-stone-600 hover:bg-stone-50'
-                      }`}
-                    >
-                      {lvl}
-                    </button>
-                  ))}
+              {/* Pilihan Sambal di Modal Detail Menu */}
+              {!isDrinkItem && (
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1.5 flex items-center gap-1">
+                    <Flame className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Pilih Sambal Favorit Anda:</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {availableSambals.map((sambal, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setChiliLevel(sambal)}
+                        className={`py-1.5 px-2.5 text-xs font-medium rounded-lg border text-left transition-all truncate ${
+                          chiliLevel === sambal
+                            ? 'border-rose-500 bg-rose-50 text-rose-800 font-bold shadow-2xs'
+                            : 'border-stone-200 text-stone-600 hover:bg-stone-50'
+                        }`}
+                      >
+                        🌶️ {sambal}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Catatan Khusus */}
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Catatan untuk Dapur (Opsional):
+                  Catatan untuk {storeName} (Opsional):
                 </label>
                 <input
                   type="text"

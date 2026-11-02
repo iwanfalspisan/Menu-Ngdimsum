@@ -5,12 +5,14 @@ interface HeroProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   onExploreMenu: () => void;
+  storeName?: string;
 }
 
 export const Hero: React.FC<HeroProps> = ({
   searchQuery,
   setSearchQuery,
   onExploreMenu,
+  storeName = 'Ngdimsum',
 }) => {
   return (
     <section className="relative bg-gradient-to-br from-stone-900 via-rose-950 to-stone-900 text-stone-100 overflow-hidden border-b border-rose-900/40">
@@ -18,7 +20,7 @@ export const Hero: React.FC<HeroProps> = ({
       <div className="absolute inset-0 z-0 opacity-30">
         <img
           src="/src/assets/images/hero_dimsum_bamboo_steamers_1792773515491.jpg"
-          alt="Dimsum Rumahan Segar Dibuat Fresh"
+          alt={`${storeName} Segar Dibuat Fresh`}
           className="w-full h-full object-cover object-center"
           referrerPolicy="no-referrer"
         />
@@ -29,7 +31,7 @@ export const Hero: React.FC<HeroProps> = ({
         <div className="max-w-2xl">
           {/* Natural editorial kicker */}
           <div className="flex items-center gap-2 text-xs text-rose-300 font-medium tracking-wide uppercase mb-3">
-            <span>Usaha Rumahan</span>
+            <span>{storeName}</span>
             <span aria-hidden="true">·</span>
             <span>Fresh Made by Order</span>
             <span aria-hidden="true">·</span>
@@ -37,11 +39,11 @@ export const Hero: React.FC<HeroProps> = ({
           </div>
 
           <h1 className="font-serif-brand text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white text-balance leading-snug mb-4">
-            Ngdimsum: Sensasi Dimsum Hangat Dapur Rumah.
+            {storeName}: Sensasi Dimsum Hangat Pilihan.
           </h1>
 
           <p className="text-sm sm:text-base text-rose-100/90 leading-relaxed mb-6">
-            Pilihan dimsum kukus lembut dan goreng renyah buatan Ngdimsum dengan isian ayam &amp; udang melimpah. Cocok untuk santapan keluarga, camilan sore, atau stok frozen siap kukus.
+            Pilihan dimsum kukus lembut dan goreng renyah buatan {storeName} dengan isian ayam &amp; udang melimpah. Cocok untuk santapan keluarga, camilan sore, atau stok frozen siap kukus.
           </p>
 
           {/* Practical Live Search & Filter Bar */}

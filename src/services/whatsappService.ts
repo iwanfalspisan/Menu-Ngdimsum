@@ -13,14 +13,14 @@ export const createWhatsappAdminMessage = (order: Order, storeName: string = 'Ng
   const orderTypeLabel =
     order.customer.orderType === 'delivery'
       ? 'Pesan Antar / Kirim Kurir'
-      : 'Ambil Sendiri di Dapur';
+      : `Ambil Sendiri di ${storeName}`;
 
   const itemsList = order.items
     .map((item, idx) => {
       const piecesInfo = item.pieces ? ` (${item.pieces})` : '';
       let line = `${idx + 1}. *${item.name}*${piecesInfo} x${item.quantity} = *${formatCurrency(item.subtotal)}*`;
-      if (item.chiliLevel && item.chiliLevel !== 'Normal') {
-        line += `\n   • Sambal: _${item.chiliLevel}_`;
+      if (item.chiliLevel && item.chiliLevel.trim()) {
+        line += `\n   • Pilihan Sambal: _${item.chiliLevel}_`;
       }
       if (item.notes) {
         line += `\n   • Catatan: _${item.notes}_`;
@@ -31,9 +31,19 @@ export const createWhatsappAdminMessage = (order: Order, storeName: string = 'Ng
 
   let addressInfo = '';
   if (order.customer.orderType === 'delivery' && order.customer.deliveryAddress) {
-    addressInfo = `\n📍 *Alamat Pengantaran:* ${order.customer.deliveryAddress}`;
+    if (order.customer.deliveryAddressStreet) {
+      addressInfo += `\n📍 *Alamat Jalan/Desa:* ${order.customer.deliveryAddressStreet}`;
+      if (order.customer.deliveryAddressHouse) {
+        addressInfo += `\n🏠 *No. Rumah / RT-RW / Blok:* ${order.customer.deliveryAddressHouse}`;
+      }
+      if (order.customer.deliveryAddressLandmark) {
+        addressInfo += `\n🚩 *Patokan / Ciri Lokasi:* ${order.customer.deliveryAddressLandmark}`;
+      }
+    } else {
+      addressInfo = `\n📍 *Alamat Pengantaran:* ${order.customer.deliveryAddress}`;
+    }
     if (order.customer.deliveryDistanceKm && order.customer.deliveryDistanceKm > 0) {
-      addressInfo += `\n📏 *Jarak dari Dapur:* ${order.customer.deliveryDistanceKm} km`;
+      addressInfo += `\n📏 *Jarak Titik Lokasi:* ${order.customer.deliveryDistanceKm} km`;
     }
     if (
       order.customer.deliveryLat !== undefined &&
@@ -102,11 +112,50 @@ export const getCustomerWhatsappUrl = (
     ? '62' + cleanPhone.slice(1)
     : cleanPhone;
 
+  const orderTypeLabel =
+    order.customer.orderType === 'delivery'
+      ? 'Pesan Antar / Kirim Kurir'
+      : `Ambil Sendiri di ${storeName}`;
+
+  const itemsList = (order.items || [])
+    .map((item, idx) => {
+      const piecesInfo = item.pieces ? ` (${item.pieces})` : '';
+      const lineTotal = item.subtotal || item.price * item.quantity;
+      let line = `${idx + 1}. *${item.name}*${piecesInfo} x${item.quantity} = *${formatCurrency(lineTotal)}*`;
+      if (item.chiliLevel && item.chiliLevel.trim()) {
+        line += `\n   • Sambal: _${item.chiliLevel}_`;
+      }
+      if (item.notes && item.notes.trim()) {
+        line += `\n   • Catatan: _${item.notes}_`;
+      }
+      return line;
+    })
+    .join('\n');
+
+  let deliveryDetails = `🛍️ *Metode Ambil:* ${orderTypeLabel}`;
+  if (order.customer.orderType === 'delivery' && order.customer.deliveryAddress) {
+    deliveryDetails += `\n📍 *Alamat Pengantaran:* ${order.customer.deliveryAddress}`;
+    if (order.customer.deliveryDistanceKm && order.customer.deliveryDistanceKm > 0) {
+      deliveryDetails += ` (${order.customer.deliveryDistanceKm} km)`;
+    }
+  }
+  if (order.customer.notes && order.customer.notes.trim()) {
+    deliveryDetails += `\n📝 *Catatan:* ${order.customer.notes}`;
+  }
+
+  const shippingBreakdown =
+    order.customer.orderType === 'delivery' || order.deliveryFee > 0
+      ? `\nSubtotal Menu: ${formatCurrency(order.subtotal)}\nOngkos Kirim: ${formatCurrency(order.deliveryFee)}`
+      : '';
+
   const msg = `Halo Kak *${order.customer.name}*, terima kasih sudah memesan di *${storeName}*! 🙏\n\nPesanan Kakak *#${order.id}* sebesar *${formatCurrency(
     order.total
-  )}* telah kami terima dan langsung diproses.\n\nJika ada pertanyaan mengenai pesanan, Kakak bisa langsung membalas pesan ini ya! 😊`;
+  )}* telah kami terima dan langsung diproses.\n\n🥟 *RINCIAN PESANAN:*\n${itemsList}\n\n${deliveryDetails}${shippingBreakdown}\n*Total Pembayaran: ${formatCurrency(
+    order.total
+  )}*\n\nJika ada pertanyaan mengenai pesanan, Kakak bisa langsung membalas pesan ini ya! 😊`;
 
   return `https://api.whatsapp.com/send?phone=${finalPhone}&text=${encodeURIComponent(
     msg
   )}`;
 };
+

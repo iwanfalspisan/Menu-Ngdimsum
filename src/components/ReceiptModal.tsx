@@ -67,6 +67,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   : 'AMBIL SENDIRI'}
               </span>
             </div>
+            {order.customer.orderType === 'delivery' && order.customer.deliveryAddress && (
+              <div className="pt-1 text-[10px] text-stone-700 leading-snug">
+                <span className="font-bold block">Alamat Pengantaran:</span>
+                <span>{order.customer.deliveryAddress}</span>
+              </div>
+            )}
           </div>
 
           {/* Items */}
@@ -81,7 +87,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </div>
                 {(it.chiliLevel || it.notes) && (
                   <div className="text-[10px] text-stone-500 italic pl-2">
-                    {it.chiliLevel && `[${it.chiliLevel}] `}
+                    {it.chiliLevel && `[Sambal: ${it.chiliLevel}] `}
                     {it.notes}
                   </div>
                 )}

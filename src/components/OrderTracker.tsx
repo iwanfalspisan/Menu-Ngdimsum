@@ -145,13 +145,13 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
       <div className="text-center max-w-lg mx-auto mb-6">
         <div className="inline-flex items-center gap-1.5 text-xs text-rose-600 font-semibold uppercase tracking-wider mb-1.5">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Status Pesanan Dapur Rumah</span>
+          <span>Status Pesanan {storeSettings?.storeName || 'Ngdimsum'}</span>
         </div>
         <h2 className="font-serif-brand text-2xl sm:text-3xl font-bold text-stone-900">
           Lacak Dimsum Anda
         </h2>
         <p className="text-xs text-stone-500 mt-1">
-          Pantau proses pembuatan dimsum hangat dari dapur rumah hingga siap disantap.
+          Pantau proses pembuatan dimsum hangat dari {storeSettings?.storeName || 'Ngdimsum'} hingga siap disantap.
         </p>
 
         {/* Search by Order ID */}
@@ -403,11 +403,11 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                         Tahap Aktif:
                       </span>
                       <span className="text-xs font-extrabold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-200 animate-pulse">
-                        Dimsum Sedang Dibuat Fresh di Dapur Rumah
+                        Dimsum Sedang Dibuat Fresh di {storeSettings?.storeName || 'Ngdimsum'}
                       </span>
                     </div>
                     <p className="text-xs text-stone-700 leading-relaxed">
-                      Dapur Ngdimsum sedang mengukus dan menggoreng pesanan Anda langsung di klakat bambu agar tekstur lembut, juicy, dan aroma harumnya tersaji maksimal.
+                      {storeSettings?.storeName || 'Ngdimsum'} sedang mengukus dan menggoreng pesanan Anda langsung di klakat bambu agar tekstur lembut, juicy, dan aroma harumnya tersaji maksimal.
                     </p>
                     <div className="pt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-stone-600 font-medium">
                       <span className="flex items-center gap-1 text-rose-700 font-semibold">
@@ -469,7 +469,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                     <p className="text-xs text-stone-700 leading-relaxed">
                       {isDelivery
                         ? `Dimsum telah dikemas rapi dalam kemasan hangat dan sedang diantarkan kurir menuju: ${selectedOrder.customer.deliveryAddress || 'Alamat Anda'}.`
-                        : 'Dimsum telah matang sempurna dan siap Anda ambil langsung di dapur rumah Ngdimsum dalam keadaan hangat.'}
+                        : `Dimsum telah matang sempurna dan siap Anda ambil langsung di ${storeSettings?.storeName || 'Ngdimsum'} dalam keadaan hangat.`}
                     </p>
                   </div>
                 </div>
@@ -487,7 +487,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                       Pesanan Telah Selesai Diterima!
                     </h4>
                     <p className="text-xs text-stone-600 mt-0.5">
-                      Terima kasih sudah memesan dimsum rumahan Ngdimsum. Selamat menikmati sajian hangat kami!
+                      Terima kasih sudah memesan di {storeSettings?.storeName || 'Ngdimsum'}. Selamat menikmati sajian hangat kami!
                     </p>
                   </div>
                 </div>

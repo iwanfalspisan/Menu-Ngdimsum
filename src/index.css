@@ -1,8 +1,21 @@
 @import "tailwindcss";
 
 @layer base {
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
   html {
     scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
   body {
@@ -10,6 +23,8 @@
     color: #292524;
     background-color: #fdf5f5;
     -webkit-font-smoothing: antialiased;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
   h1, h2, h3, .font-serif-brand {

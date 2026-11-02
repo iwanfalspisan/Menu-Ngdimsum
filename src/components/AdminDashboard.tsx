@@ -1534,8 +1534,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </span>
                   </button>
                   <span className="text-[10px] text-stone-500 block">
-                    {logoUploadMsg ||
-                      'Upload gambar logo (PNG/JPG). Otomatis tersimpan ke Google Drive & langsung mengubah logo di pojok kiri atas website.'}
+                    {logoUploadMsg || 'Upload gambar logo (PNG/JPG).'}
                   </span>
                 </div>
               </div>
@@ -2131,7 +2130,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* Photo Upload to Google Drive */}
                 <div className="space-y-1.5">
                   <label className="block font-semibold text-stone-700">
-                    Foto Produk Dimsum (Langsung Tersimpan ke Google Drive):
+                    Detail Produk
                   </label>
 
                   <div className="flex items-center gap-3">
@@ -2161,9 +2160,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {isUploadingPhoto ? 'Mengunggah ke Drive...' : 'Pilih Foto dari Galeri / Kamera'}
                         </span>
                       </button>
-                      <span className="text-[10px] text-stone-400 block leading-snug">
-                        {uploadStatusMsg || 'Foto akan otomatis diarsipkan ke folder Google Drive'}
-                      </span>
+                      {uploadStatusMsg && (
+                        <span className="text-[10px] text-stone-400 block leading-snug">
+                          {uploadStatusMsg}
+                        </span>
+                      )}
                     </div>
                   </div>
 

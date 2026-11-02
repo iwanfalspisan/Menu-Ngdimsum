@@ -752,7 +752,7 @@ export default function App() {
             <section id="katalog-menu">
               <div className="mb-3">
                 <h2 className="font-serif-brand text-xl sm:text-2xl font-bold text-stone-900">
-                  Menu
+                  Pilihan Menu
                 </h2>
               </div>
 

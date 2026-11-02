@@ -16,6 +16,8 @@ import {
   MessageCircle,
   AlertCircle,
   Flame,
+  ArrowRight,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface CartDrawerProps {
@@ -46,9 +48,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       ? storeSettings.sambalOptions
       : DEFAULT_SAMBAL_OPTIONS;
 
+  const [waBtnState, setWaBtnState] = useState<'idle' | 'pressed' | 'shake'>('idle');
+
   useEffect(() => {
     if (isOpen) {
       isSubmittingRef.current = false;
+      setWaBtnState('idle');
     }
   }, [isOpen]);
 
@@ -206,6 +211,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const handleDirectWhatsappClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!isFormValid) {
       e.preventDefault();
+      setWaBtnState('shake');
+      setTimeout(() => setWaBtnState('idle'), 350);
       if (!customerName.trim() || !customerPhone.trim()) {
         setValidationError('Mohon isi Nama Pemesan dan Nomor WhatsApp terlebih dahulu.');
       } else if (orderType === 'delivery' && !deliveryAddress.trim()) {
@@ -227,6 +234,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
     isSubmittingRef.current = true;
+    setWaBtnState('pressed');
 
     setValidationError(null);
     try {
@@ -248,14 +256,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       createdAt: new Date().toISOString(),
     };
 
-    // Biarkan browser membuka tab WhatsApp terlebih dahulu, lalu kosongkan & tutup keranjang
+    // Biarkan animasi tombol tampil sejenak dan browser membuka tab WhatsApp, lalu tutup keranjang
     setTimeout(() => {
       setCustomerNotes('');
+      setWaBtnState('idle');
       if (onOrderCreated) {
         onOrderCreated(finalOrder);
       }
       onClose();
-    }, 150);
+    }, 280);
   };
 
   return (
@@ -591,10 +600,37 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 target={isFormValid ? '_blank' : undefined}
                 rel={isFormValid ? 'noopener noreferrer' : undefined}
                 onClick={handleDirectWhatsappClick}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-98"
+                className={`relative overflow-visible w-full py-3 px-4 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 group ${
+                  waBtnState === 'pressed'
+                    ? 'bg-emerald-500 ring-4 ring-emerald-400/40 shadow-emerald-500/40 shadow-lg animate-wa-btn-pop'
+                    : waBtnState === 'shake'
+                    ? 'bg-emerald-600 animate-wa-shake ring-2 ring-rose-400'
+                    : 'bg-emerald-600 hover:bg-emerald-500 active:scale-96'
+                }`}
               >
-                <MessageCircle className="w-4 h-4 shrink-0" />
-                <span className="truncate">Checkout &amp; Pesan via WhatsApp</span>
+                {waBtnState === 'pressed' && (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 rounded-xl border-2 border-emerald-300 animate-wa-ripple"
+                  />
+                )}
+                {waBtnState === 'pressed' ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 animate-wa-icon-bounce" />
+                ) : (
+                  <MessageCircle className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 group-hover:-rotate-6" />
+                )}
+                <span className="truncate">
+                  {waBtnState === 'pressed'
+                    ? 'Membuka WhatsApp...'
+                    : 'Checkout & Pesan via WhatsApp'}
+                </span>
+                <ArrowRight
+                  className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+                    waBtnState === 'pressed'
+                      ? 'animate-wa-arrow-slide'
+                      : 'group-hover:translate-x-0.5'
+                  }`}
+                />
               </a>
             </div>
           )}

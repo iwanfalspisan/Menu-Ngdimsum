@@ -90,4 +90,93 @@
   .animate-star-pop {
     animation: starPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
+
+  @keyframes waBtnPop {
+    0% {
+      transform: scale(1);
+    }
+    30% {
+      transform: scale(0.93);
+    }
+    70% {
+      transform: scale(1.04);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes waIconBounce {
+    0% {
+      transform: scale(1) rotate(0deg);
+    }
+    30% {
+      transform: scale(1.28) rotate(-14deg);
+    }
+    65% {
+      transform: scale(1.22) rotate(12deg);
+    }
+    100% {
+      transform: scale(1) rotate(0deg);
+    }
+  }
+
+  @keyframes waArrowSlide {
+    0% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(5px) scale(1.15);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes waRippleBurst {
+    0% {
+      transform: scale(0.85);
+      opacity: 0.75;
+    }
+    100% {
+      transform: scale(1.35);
+      opacity: 0;
+    }
+  }
+
+  @keyframes waShake {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-4px);
+    }
+    50% {
+      transform: translateX(4px);
+    }
+    75% {
+      transform: translateX(-3px);
+    }
+  }
+
+  .animate-wa-btn-pop {
+    animation: waBtnPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  .animate-wa-icon-bounce {
+    animation: waIconBounce 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  .animate-wa-arrow-slide {
+    animation: waArrowSlide 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  .animate-wa-ripple {
+    animation: waRippleBurst 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .animate-wa-shake {
+    animation: waShake 0.3s ease-in-out;
+  }
 }
+

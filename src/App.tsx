@@ -423,11 +423,22 @@ export default function App() {
 
   // Modals
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isWaBtnAnimating, setIsWaBtnAnimating] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isGoogleSheetModalOpen, setIsGoogleSheetModalOpen] = useState(false);
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
   const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  const handleQuickWaCheckoutClick = () => {
+    setIsWaBtnAnimating(true);
+    setTimeout(() => {
+      setIsCartOpen(true);
+    }, 210);
+    setTimeout(() => {
+      setIsWaBtnAnimating(false);
+    }, 450);
+  };
 
   // Hidden admin access shortcut listener (Alt + A, or URL hash #admin)
   useEffect(() => {
@@ -903,12 +914,34 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setIsCartOpen(true)}
-              className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all"
+              onClick={handleQuickWaCheckoutClick}
+              className={`relative overflow-visible px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all duration-200 group ${
+                isWaBtnAnimating
+                  ? 'bg-emerald-500 ring-4 ring-emerald-400/40 shadow-emerald-500/40 shadow-lg animate-wa-btn-pop'
+                  : 'bg-emerald-600 hover:bg-emerald-500 active:scale-95'
+              }`}
             >
-              <MessageCircle className="w-4 h-4" />
+              {isWaBtnAnimating && (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 rounded-xl border-2 border-emerald-300 animate-wa-ripple"
+                />
+              )}
+              <MessageCircle
+                className={`w-4 h-4 transition-transform ${
+                  isWaBtnAnimating
+                    ? 'animate-wa-icon-bounce'
+                    : 'group-hover:scale-110 group-hover:-rotate-6'
+                }`}
+              />
               <span>Checkout via WhatsApp</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight
+                className={`w-3.5 h-3.5 transition-transform ${
+                  isWaBtnAnimating
+                    ? 'animate-wa-arrow-slide'
+                    : 'group-hover:translate-x-0.5'
+                }`}
+              />
             </button>
           </div>
         </div>

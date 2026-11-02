@@ -15,6 +15,8 @@ import {
   X,
   MessageCircle,
   AlertCircle,
+  ArrowRight,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface CheckoutModalProps {
@@ -34,9 +36,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 }) => {
   const isSubmittingRef = useRef(false);
 
+  const [waBtnState, setWaBtnState] = useState<'idle' | 'pressed' | 'shake'>('idle');
+
   useEffect(() => {
     if (isOpen) {
       isSubmittingRef.current = false;
+      setWaBtnState('idle');
     }
   }, [isOpen]);
 
@@ -201,6 +206,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handleWhatsappOrderClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!isFormValid) {
       e.preventDefault();
+      setWaBtnState('shake');
+      setTimeout(() => setWaBtnState('idle'), 350);
       if (!customerName.trim() || !customerPhone.trim()) {
         setValidationError('Mohon isi Nama Anda dan Nomor WhatsApp terlebih dahulu.');
       } else if (orderType === 'delivery' && !deliveryAddress.trim()) {
@@ -222,6 +229,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
     isSubmittingRef.current = true;
+    setWaBtnState('pressed');
 
     setValidationError(null);
     try {
@@ -245,9 +253,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     setTimeout(() => {
       setCustomerNotes('');
+      setWaBtnState('idle');
       onOrderCreated(finalOrder);
       onClose();
-    }, 150);
+    }, 280);
   };
 
   return (
@@ -440,10 +449,37 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               target={isFormValid ? '_blank' : undefined}
               rel={isFormValid ? 'noopener noreferrer' : undefined}
               onClick={handleWhatsappOrderClick}
-              className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 active:scale-98"
+              className={`relative overflow-visible w-full py-3 px-4 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 group ${
+                waBtnState === 'pressed'
+                  ? 'bg-emerald-500 ring-4 ring-emerald-400/40 shadow-emerald-500/40 shadow-lg animate-wa-btn-pop'
+                  : waBtnState === 'shake'
+                  ? 'bg-emerald-600 animate-wa-shake ring-2 ring-rose-400'
+                  : 'bg-emerald-600 hover:bg-emerald-500 active:scale-96'
+              }`}
             >
-              <MessageCircle className="w-4 h-4" />
-              <span>Checkout &amp; Pesan Sekarang via WhatsApp</span>
+              {waBtnState === 'pressed' && (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 rounded-xl border-2 border-emerald-300 animate-wa-ripple"
+                />
+              )}
+              {waBtnState === 'pressed' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 animate-wa-icon-bounce" />
+              ) : (
+                <MessageCircle className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 group-hover:-rotate-6" />
+              )}
+              <span>
+                {waBtnState === 'pressed'
+                  ? 'Membuka WhatsApp...'
+                  : 'Checkout & Pesan Sekarang via WhatsApp'}
+              </span>
+              <ArrowRight
+                className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+                  waBtnState === 'pressed'
+                    ? 'animate-wa-arrow-slide'
+                    : 'group-hover:translate-x-0.5'
+                }`}
+              />
             </a>
           </div>
         </div>

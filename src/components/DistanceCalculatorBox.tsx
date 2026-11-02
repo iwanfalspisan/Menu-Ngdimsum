@@ -563,12 +563,12 @@ export const DistanceCalculatorBox: React.FC<DistanceCalculatorBoxProps> = ({
   };
 
   return (
-    <div className="space-y-2.5 bg-white p-3 rounded-xl border border-rose-200/90 shadow-2xs animate-fade-smooth">
+    <div className="space-y-2.5 bg-white p-2.5 sm:p-3 rounded-xl border border-rose-200/90 shadow-2xs animate-fade-smooth min-w-0 overflow-hidden">
       {/* 1. Detail Alamat Pengantaran Lebih Spesifik (Untuk Panduan Kurir) */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-bold text-stone-800 leading-tight">
-            Detail Alamat Pengantaran Spesifik <span className="text-rose-500">*</span>
+      <div className="space-y-2.5 min-w-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <span className="text-[11px] font-bold text-stone-800 leading-tight min-w-0 truncate">
+            Detail Alamat Pengantaran <span className="text-rose-500">*</span>
           </span>
           {useDistance && (
             <span className="shrink-0 whitespace-nowrap text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200/80">
@@ -635,93 +635,55 @@ export const DistanceCalculatorBox: React.FC<DistanceCalculatorBoxProps> = ({
 
       {/* 2. Titik Lokasi Pembeli di Peta (Penentu Perhitungan Ongkir) */}
       {useDistance && (
-        <div className="pt-2.5 border-t border-rose-100 space-y-2">
-          <div className="flex items-center justify-between gap-2">
+        <div className="pt-2.5 border-t border-rose-100 space-y-2 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 min-w-0">
             <span className="text-[11px] font-bold text-stone-800 leading-tight">
               Titik Lokasi Pembeli (Penentu Ongkir) <span className="text-rose-500">*</span>
             </span>
             {isAutoCalculating && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 shrink-0">
                 <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                <span>Menghitung rute...</span>
+                <span>Menghitung...</span>
               </span>
             )}
           </div>
 
-          {/* Info Lokasi Toko Penjual (Sesuai Pengaturan Toko) */}
-          <div className="flex items-center justify-between gap-2 bg-rose-50/60 px-2.5 py-2 rounded-lg border border-rose-100">
-            <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-              <div className="min-w-0 flex-1">
-                {storeSettings?.storeAddress && storeSettings.storeAddress.trim() ? (
-                  <>
-                    <div className="text-[11px] leading-tight truncate">
-                      <span className="font-bold text-stone-700">Lokasi {storeName}: </span>
-                      <span className="text-stone-600">{storeSettings.storeAddress}</span>
-                    </div>
-                    <div className="text-[9px] font-mono text-rose-700/80 leading-tight mt-0.5">
-                      Titik: {storeLat.toFixed(6)}, {storeLng.toFixed(6)}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-[11px] leading-tight truncate">
-                    <span className="font-bold text-stone-700">Titik Lokasi {storeName}: </span>
-                    <span className="font-mono text-rose-700">
-                      {storeLat.toFixed(6)}, {storeLng.toFixed(6)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (mapInstanceRef.current) {
-                  mapInstanceRef.current.setView([storeLat, storeLng], 16);
-                }
-              }}
-              className="shrink-0 whitespace-nowrap text-[10px] font-bold text-rose-600 bg-white hover:bg-rose-50 px-2 py-1 rounded-md border border-rose-200/80 shadow-2xs active:scale-95 transition-all"
-            >
-              Fokus Toko
-            </button>
-          </div>
-
           {/* Tombol Aksi Cepat Menentukan Titik Lokasi Pembeli */}
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5 min-w-0">
             <button
               type="button"
               disabled={isLocatingGps || isAutoCalculating}
               onClick={handleUseMyGps}
-              className="w-full py-2 px-2 bg-rose-500 hover:bg-rose-600 disabled:bg-stone-300 text-white font-bold text-[10px] sm:text-[11px] rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-2xs active:scale-95 whitespace-nowrap"
+              className="w-full min-w-0 py-2 px-1.5 sm:px-2 bg-rose-500 hover:bg-rose-600 disabled:bg-stone-300 text-white font-bold text-[10px] sm:text-[11px] rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs active:scale-95"
             >
               {isLocatingGps ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin shrink-0" />
               ) : (
-                <Navigation className="w-3.5 h-3.5 shrink-0" />
+                <Navigation className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
               )}
-              <span>Gunakan Titik GPS Saya</span>
+              <span className="truncate">Gunakan GPS Saya</span>
             </button>
 
             <button
               type="button"
               disabled={isAutoCalculating || isLocatingGps}
               onClick={handlePlacePinAtMapCenter}
-              className="w-full py-2 px-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-[10px] sm:text-[11px] rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-2xs active:scale-95 whitespace-nowrap"
+              className="w-full min-w-0 py-2 px-1.5 sm:px-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-[10px] sm:text-[11px] rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs active:scale-95"
               title="Taruh pin pembeli di tengah peta lalu geser sesuai lokasi Anda"
             >
-              <Crosshair className="w-3.5 h-3.5 shrink-0" />
-              <span>Taruh Pin di Peta</span>
+              <Crosshair className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="truncate">Taruh Pin di Peta</span>
             </button>
           </div>
 
           {/* Peta Interaktif Leaflet untuk Mengatur Titik Koordinat Pembeli */}
-          <div className="rounded-xl overflow-hidden border border-stone-200 bg-stone-50 shadow-2xs">
+          <div className="rounded-xl overflow-hidden border border-stone-200 bg-stone-50 shadow-2xs min-w-0">
             {/* Header Peta Rapi & Presisi di HP */}
-            <div className="px-2.5 py-1.5 bg-emerald-50/90 border-b border-emerald-200/80 flex items-center justify-between gap-1.5">
+            <div className="px-2.5 py-1.5 bg-emerald-50/90 border-b border-emerald-200/80 flex flex-wrap items-center justify-between gap-1 min-w-0">
               <div className="flex items-center gap-1 min-w-0">
                 <span className="text-[11px] leading-none shrink-0">📍</span>
                 <span className="text-[10px] font-semibold text-emerald-950 leading-tight truncate">
-                  Klik peta / geser pin hijau ke titik lokasi Anda
+                  Klik peta / geser pin hijau
                 </span>
               </div>
               {buyerCoords && (
@@ -734,19 +696,19 @@ export const DistanceCalculatorBox: React.FC<DistanceCalculatorBoxProps> = ({
             {/* Kanvas Peta Leaflet */}
             <div
               ref={mapContainerRef}
-              className="h-48 sm:h-52 w-full z-0 cursor-crosshair"
+              className="h-44 sm:h-52 w-full z-0 cursor-crosshair"
             />
 
             {/* Footer Legenda Peta */}
-            <div className="px-2.5 py-1.5 bg-stone-100/90 border-t border-stone-200 flex items-center justify-between gap-2 text-[10px] text-stone-600">
-              <div className="flex items-center gap-2.5 min-w-0">
+            <div className="px-2.5 py-1.5 bg-stone-100/90 border-t border-stone-200 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px] text-stone-600 min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 min-w-0">
                 <span className="inline-flex items-center gap-1 font-semibold whitespace-nowrap">
                   <span className="w-2 h-2 rounded-full bg-rose-600 inline-block shrink-0" />
-                  {storeName}
+                  <span>{storeName}</span>
                 </span>
                 <span className="inline-flex items-center gap-1 font-semibold whitespace-nowrap">
                   <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block shrink-0" />
-                  Titik Pembeli (Geser)
+                  <span>Titik Pembeli</span>
                 </span>
               </div>
               {buyerCoords ? (
@@ -762,7 +724,7 @@ export const DistanceCalculatorBox: React.FC<DistanceCalculatorBoxProps> = ({
                   className="text-rose-600 hover:underline font-bold shrink-0 inline-flex items-center gap-0.5 whitespace-nowrap"
                 >
                   <span>Rute Maps</span>
-                  <ExternalLink className="w-2.5 h-2.5" />
+                  <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                 </a>
               ) : (
                 <a
@@ -772,7 +734,7 @@ export const DistanceCalculatorBox: React.FC<DistanceCalculatorBoxProps> = ({
                   className="text-rose-600 hover:underline font-bold shrink-0 inline-flex items-center gap-0.5 whitespace-nowrap"
                 >
                   <span>Buka Maps</span>
-                  <ExternalLink className="w-2.5 h-2.5" />
+                  <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                 </a>
               )}
             </div>
@@ -789,27 +751,27 @@ export const DistanceCalculatorBox: React.FC<DistanceCalculatorBoxProps> = ({
           {/* Kartu Hasil Pengukuran Jarak & Ongkir Otomatis dari Titik Lokasi Pembeli */}
           {buyerCoords && distanceKm !== null && distanceKm > 0 ? (
             <div
-              className={`p-2.5 rounded-lg border text-[11px] space-y-1 transition-all ${
+              className={`p-2.5 rounded-lg border text-[11px] space-y-1 transition-all min-w-0 ${
                 isOverMaxDistance
                   ? 'bg-rose-50 border-rose-300 text-rose-900'
                   : 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
               }`}
             >
-              <div className="flex items-center justify-between gap-2 font-bold">
-                <span className="flex items-center gap-1.5 min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 font-bold min-w-0">
+                <span className="flex items-center gap-1 min-w-0">
                   <CheckCircle2
                     className={`w-3.5 h-3.5 shrink-0 ${
                       isOverMaxDistance ? 'text-rose-600' : 'text-emerald-600'
                     }`}
                   />
-                  <span className="truncate">Jarak Titik Lokasi: {distanceKm} km</span>
+                  <span className="whitespace-nowrap">Jarak: {distanceKm} km</span>
                 </span>
                 <span className="font-mono text-[11px] px-2 py-0.5 rounded-md bg-white border border-emerald-200/90 shrink-0 whitespace-nowrap shadow-2xs">
                   Ongkir {formatCurrency(calculatedFee)}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-1 text-[10px] text-stone-600">
+              <div className="flex items-center justify-between gap-1 text-[10px] text-stone-600 min-w-0">
                 <span className="truncate">
                   {distanceKm} km × {formatCurrency(perKmRate)}/km (Min. {formatCurrency(minFee)})
                   {estimatedMinutes ? ` · ~${estimatedMinutes} mnt` : ''}
@@ -831,7 +793,7 @@ export const DistanceCalculatorBox: React.FC<DistanceCalculatorBoxProps> = ({
           ) : (
             <div className="text-[10px] text-stone-500 leading-snug px-0.5">
               {statusMessage ||
-                'Klik titik lokasi Anda pada peta di atas atau tekan "Gunakan Titik GPS Saya" — ongkir dihitung otomatis dari titik lokasi pembeli.'}
+                'Klik titik lokasi Anda pada peta di atas atau tekan "Gunakan GPS Saya" — ongkir dihitung otomatis dari titik lokasi pembeli.'}
             </div>
           )}
         </div>

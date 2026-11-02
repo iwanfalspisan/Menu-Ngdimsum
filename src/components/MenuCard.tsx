@@ -155,7 +155,9 @@ export const MenuCard: React.FC<MenuCardProps> = ({
       >
         {/* Product Image Showcase with Shimmer Skeleton Loading */}
         <div
-          className="relative aspect-[16/11] w-full bg-rose-50/40 overflow-hidden cursor-pointer"
+          className={`relative w-full bg-rose-50/40 overflow-hidden cursor-pointer ${
+            !imageLoaded || imageError ? 'min-h-36' : ''
+          }`}
           onClick={() => item.inStock && setShowOptionsModal(true)}
         >
           {/* Loading Shimmer Placeholder */}
@@ -175,12 +177,12 @@ export const MenuCard: React.FC<MenuCardProps> = ({
                 setImageError(true);
                 setImageLoaded(true);
               }}
-              className={`w-full h-full object-cover object-center group-hover:scale-105 transition-all duration-500 ease-out ${
+              className={`w-full h-auto block group-hover:scale-105 transition-all duration-500 ease-out ${
                 imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
               }`}
             />
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-rose-50/60 text-stone-400">
+            <div className="w-full min-h-36 flex flex-col items-center justify-center p-3 bg-rose-50/60 text-stone-400">
               <Utensils className="w-6 h-6 mb-1 text-rose-300" />
               <span className="text-[11px] font-serif-brand font-medium text-stone-500 text-center line-clamp-1">
                 {item.name}
